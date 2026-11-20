@@ -55,7 +55,7 @@ def main():
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, args.lr, total_steps=args.epochs * len(tl), pct_start=0.05)
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD, label_smoothing=0.0 if overfit else 0.1)
 
-    args.out.mkdir(exist_ok=True)
+    args.out.mkdir(parents=True, exist_ok=True)
     best = -1.0
     for epoch in range(1, args.epochs + 1):
         t0, total = time.time(), 0.0
