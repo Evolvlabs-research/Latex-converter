@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from data import PAD, MathWriting, Vocab, collate, load_index
+from data import PAD, MathWriting, Vocab, WidthBatches, collate, load_split
 from model import Im2Latex
 
 
@@ -34,19 +34,22 @@ def main():
     p.add_argument("--batch", type=int, default=64)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--limit", type=int, help="n'utiliser que N exemples (test de surapprentissage)")
-    p.add_argument("--workers", type=int, default=8)
+    # 0 : avec le cache, préparer un lot prend ~16 ms ; sur Mac, des processus séparés le ralentissent (×30 à 10)
+    p.add_argument("--workers", type=int, default=0)
     args = p.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     # shortcut: seul le split « train » (humain) sert ; ajouter « synthetic » quand le modèle plafonne.
-    vocab = Vocab([t for _, toks in load_index(args.data, "train") for t in toks])
+    vocab = Vocab([t for toks in load_split(args.data, "train")["tokens"] for t in toks])
     overfit = args.limit is not None
     train = MathWriting(args.data, "train", vocab, augment=not overfit, limit=args.limit)
     # en test de surapprentissage, on évalue sur les mêmes exemples
     val = train if overfit else MathWriting(args.data, "valid", vocab)
-    tl = DataLoader(train, args.batch, shuffle=True, collate_fn=collate, num_workers=args.workers,
-                    persistent_workers=args.workers > 0)
-    vl = DataLoader(val, args.batch, collate_fn=collate, num_workers=args.workers)
+    tl = DataLoader(train, batch_sampler=WidthBatches(train.widths, args.batch), collate_fn=collate,
+                    num_workers=args.workers, persistent_workers=args.workers > 0)
+    # graine fixe : les 30 lots évalués sont les mêmes à chaque époque, et de toutes les largeurs
+    vl = DataLoader(val, batch_sampler=WidthBatches(val.widths, args.batch, seed=0), collate_fn=collate,
+                    num_workers=args.workers)
 
     model = Im2Latex(len(vocab)).to(device)
     print(f"{sum(p.numel() for p in model.parameters()) / 1e6:.1f} M paramètres, {len(vocab)} tokens, "
@@ -61,8 +64,9 @@ def main():
         t0, total = time.time(), 0.0
         for x, widths, y in tl:
             x, y = x.to(device), y.to(device)
-            logits = model(x, widths, y[:, :-1])
-            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1))
+            with torch.autocast(device, dtype=torch.bfloat16, enabled=device != "cpu"):  # bf16 : -20 % de temps
+                logits = model(x, widths, y[:, :-1])
+            loss = loss_fn(logits.float().reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1))
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
