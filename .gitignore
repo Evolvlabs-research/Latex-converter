@@ -2,3 +2,5 @@ data/
 checkpoints/
 .venv/
 __pycache__/
+app/.build/
+app/*.app/
