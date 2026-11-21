@@ -1,11 +1,12 @@
 #!/bin/sh
-# Construit app/Notes2LaTeX.app : ./app/build.sh && open app/Notes2LaTeX.app
+# Construit app/Nabla.app : ./app/build.sh && open app/Nabla.app
 set -e
 cd "$(dirname "$0")"
 swift build -c release
-APP=Notes2LaTeX.app
+APP=Nabla.app
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 cp .build/release/Notes2LaTeX "$APP/Contents/MacOS/"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -15,7 +16,9 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleLocalizations</key><array><string>fr</string></array>
   <key>CFBundleExecutable</key><string>Notes2LaTeX</string>
   <key>CFBundleIdentifier</key><string>local.notes2latex</string>
-  <key>CFBundleName</key><string>Notes2LaTeX</string>
+  <key>CFBundleName</key><string>Nabla</string>
+  <key>CFBundleDisplayName</key><string>Nabla</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>

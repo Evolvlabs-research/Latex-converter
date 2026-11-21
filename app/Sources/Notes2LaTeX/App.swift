@@ -1,4 +1,4 @@
-// notes2latex : projets LaTeX compilés sur ce Mac, avec lecture de formules manuscrites.
+// Nabla : projets LaTeX compilés sur ce Mac, avec lecture de formules manuscrites.
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,7 +9,7 @@ struct Notes2LaTeXApp: App {
     init() { NSApplication.shared.setActivationPolicy(.regular) }  // fenêtre au premier plan aussi avec `swift run`
 
     var body: some Scene {
-        WindowGroup("notes2latex") { RootView() }
+        WindowGroup("Nabla") { RootView() }
             .defaultSize(width: 1320, height: 820)
             .commands {
                 CommandGroup(after: .toolbar) {
@@ -69,12 +69,11 @@ struct WelcomeView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 14) {
-                Image(systemName: "function")
-                    .font(.system(size: 52, weight: .light))
-                    .foregroundStyle(.tint)
-                    .frame(width: 96, height: 96)
-                    .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                Text("notes2latex").font(.largeTitle.weight(.semibold))
+                Image(nsImage: NSApp.applicationIconImage)  // le logo, tiré de l'icône de l'app
+                    .resizable()
+                    .frame(width: 112, height: 112)
+                    .accessibilityHidden(true)
+                Text("Nabla").font(.largeTitle.weight(.semibold))
                 Text("Vos projets LaTeX, compilés sur ce Mac.").foregroundStyle(.secondary)
                 VStack(spacing: 10) {
                     Button(action: newProject) {
