@@ -46,8 +46,14 @@ struct LaTeXEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        let tv = scroll.documentView as! NSTextView
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        let tv = LaTeXTextView()
+        tv.autoresizingMask = [.width]
+        tv.isVerticallyResizable = true
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        tv.textContainer?.widthTracksTextView = true
+        scroll.documentView = tv
         tv.delegate = context.coordinator
         tv.isRichText = false
         tv.allowsUndo = true
@@ -85,11 +91,31 @@ struct LaTeXEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         let text: Binding<String>
+        private var typedLetter = false
         init(text: Binding<String>) { self.text = text }
+
+        func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString string: String?) -> Bool {
+            typedLetter = string?.count == 1 && string?.first?.isLetter == true
+            return true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             highlight(tv.textStorage!)
             text.wrappedValue = tv.string
+            // Une lettre tapée dans « \… » : ouvrir la liste (après la frappe, pas pendant).
+            if typedLetter, tv.selectedRange().length == 0,
+               commandPrefixRange(tv.string as NSString, cursor: tv.selectedRange().location) != nil {
+                DispatchQueue.main.async { tv.complete(nil) }
+            }
+        }
+
+        func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange charRange: NSRange,
+                      indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
+            let ns = textView.string as NSString
+            guard let range = commandPrefixRange(ns, cursor: NSMaxRange(charRange)), range == charRange else { return [] }
+            index?.pointee = 0
+            return commandCompletions(prefix: ns.substring(with: charRange), in: textView.string)
         }
     }
 }

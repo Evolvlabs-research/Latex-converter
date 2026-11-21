@@ -38,6 +38,24 @@ final class Tests: XCTestCase {
         XCTAssertEqual(relativePath(nfc, root: nfd), "chap/a.tex")
     }
 
+    func testCommandCompletions() {
+        XCTAssertEqual(commandCompletions(prefix: "fr", in: "").first, "frac")
+        XCTAssertEqual(commandCompletions(prefix: "in", in: "").prefix(3), ["in", "int", "infty"])  // la commande tapée d'abord
+        XCTAssertEqual(commandCompletions(prefix: "R", in: "\\newcommand{\\RR}{\\mathbb{R}}").first, "Rightarrow")
+        XCTAssertTrue(commandCompletions(prefix: "R", in: "\\newcommand{\\RR}{\\mathbb{R}}").contains("RR"))  // macro du fichier
+        XCTAssertFalse(commandCompletions(prefix: "zz", in: "\\zz").contains("zz"))  // pas la saisie en cours elle-même
+        XCTAssertEqual(commandArity["frac"], 2)
+        XCTAssertEqual(commandArity["alpha"], 0)
+    }
+
+    func testCommandPrefixRange() {
+        let text = "x = \\fra y \\\\ab" as NSString
+        XCTAssertEqual(commandPrefixRange(text, cursor: 8), NSRange(location: 5, length: 3))  // « \fra|»
+        XCTAssertNil(commandPrefixRange(text, cursor: 2))  // pas de « \ » avant
+        XCTAssertNil(commandPrefixRange(text, cursor: 5))  // juste après « \ » : rien tapé encore
+        XCTAssertEqual(commandPrefixRange("é\\al" as NSString, cursor: 4), NSRange(location: 2, length: 2))
+    }
+
     func testEngineFlag() {
         XCTAssertEqual(engineFlag("% !TEX program = XeLaTeX\n\\documentclass{article}"), "-pdfxe")
         XCTAssertEqual(engineFlag("\\documentclass{article}"), "-pdf")
