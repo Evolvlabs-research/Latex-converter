@@ -23,6 +23,7 @@ struct ProjectView: View {
         .navigationTitle(project.name)
         .navigationSubtitle(project.status)
         .toolbar { toolbar }
+        .focusedSceneValue(\.exportPDF, project.pdfData == nil ? nil : exportPDF)  // Fichier › Exporter en PDF…
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in project.reload() }
         .alert("Nouveau fichier", isPresented: $askingName) {
             TextField("chapitre.tex", text: $newFileName)
@@ -138,9 +139,9 @@ struct ProjectView: View {
             }
             .help("Erreurs et avertissements de la compilation — ⇧⌘L")
             .keyboardShortcut("l", modifiers: [.command, .shift])
-            Button(action: exportPDF) { Label("Exporter le PDF", systemImage: "square.and.arrow.up") }
-                .help("Enregistrer le PDF — ⌘E")
-                .keyboardShortcut("e")
+            Button(action: exportPDF) { Label("Exporter en PDF", systemImage: "square.and.arrow.up") }
+                .labelStyle(.titleAndIcon)
+                .help("Enregistrer le PDF où vous voulez — ⌘E, aussi dans le menu Fichier")
                 .disabled(project.pdfData == nil)
         }
     }

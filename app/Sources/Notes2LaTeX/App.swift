@@ -12,6 +12,7 @@ struct Notes2LaTeXApp: App {
         WindowGroup("Nabla") { RootView() }
             .defaultSize(width: 1320, height: 820)
             .commands {
+                CommandGroup(after: .saveItem) { ExportPDFCommand() }
                 CommandGroup(after: .toolbar) {
                     Picker("Apparence", selection: $appearance) {
                         Text("Comme le système").tag("system")
@@ -20,6 +21,24 @@ struct Notes2LaTeXApp: App {
                     }
                 }
             }
+    }
+}
+
+/// Le projet de la fenêtre au premier plan fournit son export ; le menu le déclenche.
+struct ExportPDFKey: FocusedValueKey { typealias Value = () -> Void }
+extension FocusedValues {
+    var exportPDF: (() -> Void)? {
+        get { self[ExportPDFKey.self] }
+        set { self[ExportPDFKey.self] = newValue }
+    }
+}
+
+struct ExportPDFCommand: View {
+    @FocusedValue(\.exportPDF) private var export
+    var body: some View {
+        Button("Exporter en PDF…") { export?() }
+            .keyboardShortcut("e")
+            .disabled(export == nil)
     }
 }
 
