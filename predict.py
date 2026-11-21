@@ -1,5 +1,6 @@
 """Lit une formule : uv run predict.py formule.jpg [autre.png | trace.inkml ...]"""
 import argparse
+import sys
 from pathlib import Path
 
 import torch
@@ -26,17 +27,30 @@ def load_photo(path: Path) -> Image.Image:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("files", nargs="+", type=Path)
+    p.add_argument("files", nargs="*", type=Path)
     p.add_argument("--ckpt", type=Path, default=Path("checkpoints/best.pt"))
+    p.add_argument("--serve", action="store_true",
+                   help="un chemin par ligne sur l'entrée standard, une formule par ligne en sortie (modèle chargé une fois)")
     args = p.parse_args()
 
     model, itos = load_checkpoint(args.ckpt)
     vocab = Vocab(itos)
 
-    for f in args.files:
+    def read(f: Path) -> str:
         img = render(read_inkml(f)[0]) if f.suffix == ".inkml" else load_photo(f)
         ids = model.beam_search(to_tensor(img)[None], torch.tensor([img.width]))[0]
-        print(f"{f.name}: {detokenize(vocab.decode(ids))}")
+        return detokenize(vocab.decode(ids))
+
+    if args.serve:  # utilisé par l'app Nabla
+        for line in iter(sys.stdin.readline, ""):
+            try:
+                print(read(Path(line.rstrip("\n"))), flush=True)
+            except Exception as e:  # une image illisible ne doit pas arrêter le serveur
+                print("ERREUR " + str(e).replace("\n", " "), flush=True)
+        return
+
+    for f in args.files:
+        print(f"{f.name}: {read(f)}")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ struct ProjectView: View {
     @State private var askingName = false
     @State private var newFileName = ""
     @State private var message: String?
+    @State private var showHistory = false
 
     var body: some View {
         NavigationSplitView {
@@ -23,6 +24,14 @@ struct ProjectView: View {
         .navigationTitle(project.name)
         .navigationSubtitle(project.status)
         .toolbar { toolbar }
+        .sheet(item: $project.review) { review in
+            FormulaReviewView(review: review,
+                              insert: { latex in project.review = nil; project.editor.insertFormula(latex) },
+                              cancel: { project.review = nil })
+        }
+        .sheet(isPresented: $showHistory) {
+            if let file = project.current { HistoryView(project: project, file: file) { showHistory = false } }
+        }
         .focusedSceneValue(\.exportPDF, project.pdfData == nil ? nil : exportPDF)  // Fichier › Exporter en PDF…
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in project.reload() }
         .alert("Nouveau fichier", isPresented: $askingName) {
@@ -52,6 +61,24 @@ struct ProjectView: View {
                             Divider()
                             Button("Placer dans la corbeille", role: .destructive) { project.trash(file) }
                         }
+                }
+            }
+            if !project.outline.isEmpty {
+                Section("Plan") {
+                    let top = project.outline.map(\.level).min() ?? 0
+                    ForEach(project.outline, id: \.self) { item in
+                        Button { project.reveal(file: item.file, line: item.line) } label: {
+                            Text(item.title)
+                                .lineLimit(1)
+                                .font(item.level == top ? .body.weight(.medium) : .body)
+                                .foregroundStyle(item.level == top ? .primary : .secondary)
+                                .padding(.leading, CGFloat(item.level - top) * 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("\(item.file), ligne \(item.line)")
+                    }
                 }
             }
         }
@@ -131,6 +158,9 @@ struct ProjectView: View {
                 .help("Montrer dans le PDF la ligne du curseur — ⌘J. Double-cliquer dans le PDF fait l'inverse.")
                 .keyboardShortcut("j")
                 .disabled(project.pdf == nil || !project.isEditingText)
+            Button { showHistory = true } label: { Label("Historique", systemImage: "clock.arrow.circlepath") }
+                .help("Versions précédentes du fichier ouvert, à consulter ou restaurer")
+                .disabled(!project.isEditingText)
             Button(action: project.compile) { Label("Compiler", systemImage: "arrow.clockwise") }
                 .help("Recompiler — ⌘R. Le PDF se met aussi à jour quand on arrête de taper.")
                 .keyboardShortcut("r")
@@ -325,5 +355,146 @@ final class FittingPDFView: PDFView {
         guard document != nil else { return }
         let s = min(scaleFactorForSizeToFit, 2.5)
         if s > 0 { scaleFactor = s }
+    }
+}
+
+// MARK: - Vérification d'une formule lue
+
+struct FormulaReviewView: View {
+    let review: FormulaReview
+    let insert: (String) -> Void
+    let cancel: () -> Void
+    @State private var latex: String
+    @State private var rendered: NSImage?
+    @State private var renderFailed = false
+
+    init(review: FormulaReview, insert: @escaping (String) -> Void, cancel: @escaping () -> Void) {
+        self.review = review
+        self.insert = insert
+        self.cancel = cancel
+        _latex = State(initialValue: review.latex)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Vérifier la formule").font(.title3.weight(.semibold))
+            HStack(spacing: 12) {
+                paper("Photo") {
+                    if let image = NSImage(contentsOf: review.photo) {
+                        Image(nsImage: image).resizable().scaledToFit()
+                    } else {
+                        Label(review.photo.lastPathComponent, systemImage: "scribble").foregroundStyle(.black.opacity(0.6))
+                    }
+                }
+                paper("Rendu") {
+                    if let rendered {
+                        Image(nsImage: rendered).resizable().scaledToFit()
+                    } else if renderFailed {
+                        Label("Ne compile pas", systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            }
+            .frame(height: 170)
+            TextField("LaTeX", text: $latex, axis: .vertical)
+                .font(.body.monospaced())
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+            Text("Corrigez la formule si besoin : le rendu suit.").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Annuler", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
+                Button("Insérer") { insert(latex) }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(latex.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 580)
+        .task(id: latex) {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let image = await renderFormula(latex)
+            guard !Task.isCancelled else { return }
+            rendered = image
+            renderFailed = image == nil
+        }
+    }
+
+    /// Fond blanc dans les deux modes : la photo et le rendu sont de l'encre sur du papier.
+    func paper(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            content()
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator))
+        }
+    }
+}
+
+// MARK: - Historique
+
+struct HistoryView: View {
+    let project: Project
+    let file: String
+    let close: () -> Void
+    @State private var versions: [Snapshot] = []
+    @State private var selected: Snapshot?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Historique de \(file)").font(.headline)
+                Spacer()
+                Button("Fermer", action: close).keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+            Divider()
+            if versions.isEmpty {
+                ContentUnavailableView("Aucune version enregistrée", systemImage: "clock",
+                                       description: Text("Une version est gardée à l'ouverture du fichier, puis toutes les deux minutes de travail."))
+            } else {
+                HSplitView {
+                    List(versions, selection: $selected) { version in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(version.date, format: .relative(presentation: .named)).fontWeight(.medium)
+                            Text(version.date.formatted(date: .abbreviated, time: .standard)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                        .tag(version)
+                    }
+                    .frame(minWidth: 200, idealWidth: 230, maxWidth: 280)
+                    ScrollView {
+                        Text(selected?.text ?? "")
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                    }
+                    .frame(minWidth: 360)
+                }
+            }
+            Divider()
+            HStack {
+                Text("Restaurer garde aussi la version actuelle dans l'historique.").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Restaurer cette version") {
+                    if let selected { project.restore(selected) }
+                    close()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selected == nil)
+            }
+            .padding(14)
+        }
+        .frame(width: 780, height: 540)
+        .onAppear {
+            versions = snapshots(root: project.root, file: file)
+            selected = versions.first
+        }
     }
 }

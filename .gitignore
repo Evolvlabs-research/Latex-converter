@@ -4,3 +4,5 @@ checkpoints/
 __pycache__/
 app/.build/
 app/*.app/
+app/Model/
+app/Nabla.zip

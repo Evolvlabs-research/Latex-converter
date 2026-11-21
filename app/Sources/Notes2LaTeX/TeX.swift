@@ -1,7 +1,7 @@
-// Outils en ligne de commande : latexmk (compilation), synctex (lien source <-> PDF), predict.py (photo -> LaTeX).
-import Foundation
+// Outils en ligne de commande : latexmk (compilation), synctex (lien source <-> PDF) ; lecture des photos (Reader.swift).
+import AppKit
 
-// shortcut: chemin du dépôt figé à la compilation ; à remplacer par un réglage si l'app quitte ce dossier.
+// Chemin du dépôt figé à la compilation : seulement pour les tests et `swift run` (modèle hors de l'app).
 let repo = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
@@ -139,11 +139,11 @@ Une formule :
 """
 
 /// Crée un dossier de projet avec main.tex ; refuse un dossier qui existe déjà (rien n'est écrasé).
-func createProject(at url: URL) -> String? {
+func createProject(at url: URL, template: String = newProjectTemplate) -> String? {
     guard !FileManager.default.fileExists(atPath: url.path) else { return "« \(url.lastPathComponent) » existe déjà." }
     do {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
-        try newProjectTemplate.write(to: url.appendingPathComponent("main.tex"), atomically: true, encoding: .utf8)
+        try template.write(to: url.appendingPathComponent("main.tex"), atomically: true, encoding: .utf8)
     } catch { return error.localizedDescription }
     return nil
 }
@@ -175,7 +175,193 @@ func synctexView(pdf: URL, file: String, line: Int, root: URL) async -> (page: I
 
 // MARK: - Photo -> LaTeX
 
-/// predict.py écrit « nom_du_fichier: formule ».
-func prediction(_ out: String, file: String) -> String? {
-    out.split(separator: "\n").last { $0.hasPrefix(file + ": ") }.map { String($0.dropFirst(file.count + 2)) }
+/// Lecteur de formules (Reader.swift) chargé à la première lecture, puis gardé : les lectures suivantes sont rapides.
+/// Le modèle est dans Nabla.app (Contents/Resources/Model, copié par build.sh) ; hors de l'app, dans app/Model du dépôt.
+actor Predictor {
+    static let shared = Predictor()
+    private var reader: FormulaReader?
+
+    static var modelDir: URL {
+        let bundled = Bundle.main.resourceURL?.appendingPathComponent("Model")
+        if let bundled, FileManager.default.fileExists(atPath: bundled.appendingPathComponent("vocab.json").path) { return bundled }
+        return repo.appendingPathComponent("app/Model")  // swift run, swift test
+    }
+
+    func read(_ file: URL) async -> Result<String, PredictError> {
+        do {
+            if reader == nil { reader = try await FormulaReader.load(from: Self.modelDir) }
+            return .success(try reader!.read(file))
+        } catch let e as ReadError {
+            return .failure(PredictError(e.message))
+        } catch {
+            return .failure(PredictError(error.localizedDescription))
+        }
+    }
 }
+
+struct PredictError: Error {
+    let message: String
+    init(_ message: String) { self.message = message }
+}
+
+/// Rendu d'une formule seule (pour vérifier une lecture avant de l'insérer) ; nil si elle ne compile pas.
+func renderFormula(_ latex: String) async -> NSImage? {
+    guard let tex = findTool("pdflatex") else { return nil }
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-formule-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let doc = "\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n$\\displaystyle \(latex)$\n\\end{document}\n"
+    do {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try doc.write(to: dir.appendingPathComponent("f.tex"), atomically: true, encoding: .utf8)
+    } catch { return nil }
+    let r = await run(tex, ["-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", "f.tex"], in: dir, timeout: 20)
+    guard r.status == 0, let data = try? Data(contentsOf: dir.appendingPathComponent("f.pdf")) else { return nil }
+    return NSImage(data: data)
+}
+
+// MARK: - Plan du document
+
+struct OutlineItem: Hashable {
+    var level: Int  // 0 partie, 1 chapitre, 2 section, 3 sous-section, 4 sous-sous-section
+    var title: String
+    var file: String
+    var line: Int
+}
+
+let sectionLevels = ["part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4]
+
+/// Titres dans l'ordre de lecture, en suivant les \input et \include depuis `file`.
+func documentOutline(_ file: String, read: (String) -> String?, depth: Int = 0) -> [OutlineItem] {
+    guard depth < 10, let text = read(file) else { return [] }
+    var items: [OutlineItem] = []
+    for (i, raw) in text.components(separatedBy: "\n").enumerated() {
+        let line = raw.replacing(#/(^|[^\\])%.*/#) { $0.1 }  // sans les commentaires (mais « \% » reste)
+        for m in line.matches(of: #/\\(part|chapter|section|subsection|subsubsection|input|include)\*?(?:\[[^\]]*\])?\{/#) {
+            guard let arg = balancedArgument(line[m.range.upperBound...]) else { continue }
+            let command = String(m.1)
+            if command == "input" || command == "include" {
+                let path = ext(arg).isEmpty ? arg + ".tex" : arg
+                items += documentOutline(URL(fileURLWithPath: path).standardized.relativePath.replacingOccurrences(of: "./", with: ""),
+                                         read: read, depth: depth + 1)
+            } else {
+                items.append(OutlineItem(level: sectionLevels[command] ?? 2, title: arg, file: file, line: i + 1))
+            }
+        }
+    }
+    return items
+}
+
+/// Contenu d'un argument jusqu'à l'accolade fermante qui lui correspond (les {} imbriquées sont gardées).
+func balancedArgument(_ text: Substring) -> String? {
+    var depth = 1
+    for i in text.indices {
+        if text[i] == "{" { depth += 1 }
+        if text[i] == "}" { depth -= 1; if depth == 0 { return String(text[..<i]) } }
+    }
+    return nil
+}
+
+// MARK: - Modèles de projet
+
+struct ProjectTemplate: Identifiable {
+    let id: String
+    let name: String
+    let icon: String
+    let main: String
+}
+
+let projectTemplates = [
+    ProjectTemplate(id: "article", name: "Article", icon: "doc.text", main: newProjectTemplate),
+    ProjectTemplate(id: "rapport", name: "Rapport", icon: "book.closed", main: """
+    \\documentclass[11pt]{report}
+    \\usepackage[T1]{fontenc}
+    \\usepackage[french]{babel}
+    \\usepackage{amsmath,amssymb,graphicx}
+    \\usepackage{hyperref}
+
+    \\title{Titre du rapport}
+    \\author{}
+    \\date{\\today}
+
+    \\begin{document}
+    \\maketitle
+    \\tableofcontents
+
+    \\chapter{Introduction}
+
+    \\section{Contexte}
+    Texte.
+
+    \\chapter{Conclusion}
+    Texte.
+
+    \\end{document}
+
+    """),
+    ProjectTemplate(id: "presentation", name: "Présentation", icon: "rectangle.on.rectangle", main: """
+    \\documentclass{beamer}
+    \\usepackage[T1]{fontenc}
+    \\usepackage[french]{babel}
+    \\usepackage{amsmath,amssymb}
+
+    \\title{Titre de la présentation}
+    \\author{}
+    \\date{\\today}
+
+    \\begin{document}
+
+    \\begin{frame}
+      \\titlepage
+    \\end{frame}
+
+    \\begin{frame}{Première diapositive}
+      \\begin{itemize}
+        \\item Un point
+        \\item Une formule : $\\displaystyle \\sum_{n\\ge 1} \\frac{1}{n^2} = \\frac{\\pi^2}{6}$
+      \\end{itemize}
+    \\end{frame}
+
+    \\end{document}
+
+    """),
+    ProjectTemplate(id: "exercices", name: "Exercices", icon: "list.number", main: """
+    \\documentclass[11pt]{article}
+    \\usepackage[T1]{fontenc}
+    \\usepackage[french]{babel}
+    \\usepackage[margin=2.5cm]{geometry}
+    \\usepackage{amsmath,amssymb,amsthm,enumitem}
+
+    \\theoremstyle{definition}
+    \\newtheorem{exercice}{Exercice}
+
+    \\begin{document}
+
+    \\section*{Feuille d'exercices}
+
+    \\begin{exercice}
+    Calculer $\\displaystyle \\int_0^1 x^2\\,dx$.
+    \\end{exercice}
+
+    \\begin{exercice}
+    \\begin{enumerate}[label=\\alph*)]
+      \\item Montrer que la suite $u_n = \\frac{1}{n}$ converge.
+      \\item Donner sa limite.
+    \\end{enumerate}
+    \\end{exercice}
+
+    \\end{document}
+
+    """),
+    ProjectTemplate(id: "formule", name: "Formule seule", icon: "function", main: """
+    \\documentclass[border=8pt]{standalone}
+    \\usepackage{amsmath,amssymb}
+
+    \\begin{document}
+    $\\displaystyle
+    \\int_0^1 x^2\\,dx = \\frac{1}{3}
+    $
+    \\end{document}
+
+    """),
+]
+

@@ -4,3 +4,8 @@ version = "0.1.0"
 description = "Reconnaissance de formules manuscrites vers LaTeX, modèle entraîné de zéro"
 requires-python = ">=3.11"
 dependencies = ["torch", "pillow", "numpy"]  # numpy : évite l'avertissement de torch au démarrage
+
+[dependency-groups]
+dev = [
+    "coremltools>=9.0",
+]

@@ -7,6 +7,11 @@ let buildExtensions: Set<String> = ["aux", "log", "out", "toc", "lof", "lot", "f
 
 func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased() }
 
+/// Lue sur le disque à chaque appel (les valeurs de `URL.resourceValues` restent en cache après une écriture).
+func modificationDate(_ url: URL) -> Date? {
+    (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+}
+
 @Observable @MainActor final class Project {
     let root: URL
     var files: [String] = []  // chemins relatifs
@@ -21,18 +26,30 @@ func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased
     var duration: Duration?
     var compiling = false
     var reading = false
+    var review: FormulaReview?  // formule lue, en attente de vérification avant insertion
+    var outline: [OutlineItem] = []
 
     @ObservationIgnored let editor = EditorController()
     @ObservationIgnored weak var pdfView: FittingPDFView?
     @ObservationIgnored private var pending = false
     @ObservationIgnored private var compileTask: Task<Void, Never>?
+    @ObservationIgnored private var knownDate: Date?  // date du fichier ouvert la dernière fois qu'on l'a lu ou écrit
 
     init(root: URL) {
         self.root = root
         refresh()
         main = UserDefaults.standard.string(forKey: mainKey).flatMap { files.contains($0) ? $0 : nil } ?? guessMain()
         open(main ?? files.first { textExtensions.contains(ext($0)) })
+        editor.sources = { [weak self] in self?.projectSources() ?? CompletionSources() }
+        editor.onPhoto = { [weak self] in self?.readPhoto($0) }
         compile()
+        Task { [weak self] in  // un autre éditeur ou Git peut modifier le fichier ouvert à tout moment
+            while true {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                self.checkDisk()
+            }
+        }
     }
 
     var name: String { root.lastPathComponent }
@@ -90,21 +107,49 @@ func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased
         openError = nil
         text = ""
         guard let file, textExtensions.contains(ext(file)) else { return }
-        do { text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8) } catch {
+        let url = root.appendingPathComponent(file)
+        do { text = try String(contentsOf: url, encoding: .utf8) } catch {
             openError = "« \(file) » n'est pas un texte UTF-8 lisible : il n'est pas modifié ici."
+            return
         }
+        knownDate = modificationDate(url)
+        saveSnapshot(text, root: root, file: file)  // l'état d'avant la séance, pour pouvoir y revenir
     }
 
     /// Chaque frappe est écrite sur le disque : rien à perdre en quittant.
     func edit(_ new: String) {
         guard let current, isEditingText else { return }
+        let url = root.appendingPathComponent(current)
+        // Modifié ailleurs depuis notre dernière lecture : on garde la version du disque, la nôtre va dans l'historique.
+        if modificationDate(url) != knownDate, let disk = try? String(contentsOf: url, encoding: .utf8), disk != text {
+            saveSnapshot(new, root: root, file: current)
+            text = disk
+            knownDate = modificationDate(url)
+            saveError = "« \(current) » a été modifié ailleurs : version du disque rechargée, la vôtre est dans l'historique."
+            scheduleCompile()
+            return
+        }
         text = new
         do {
-            try new.write(to: root.appendingPathComponent(current), atomically: true, encoding: .utf8)
+            try new.write(to: url, atomically: true, encoding: .utf8)
+            knownDate = modificationDate(url)
             saveError = nil
         } catch {
             saveError = "Enregistrement impossible : \(error.localizedDescription)"
         }
+        saveSnapshot(new, root: root, file: current, minInterval: 120)  // une version toutes les 2 minutes de travail
+        scheduleCompile()
+    }
+
+    /// Relit le fichier ouvert s'il a changé sur le disque depuis notre dernière lecture ou écriture.
+    func checkDisk() {
+        guard let current, isEditingText else { return }
+        let url = root.appendingPathComponent(current)
+        let date = modificationDate(url)
+        guard date != knownDate else { return }
+        knownDate = date
+        guard let disk = try? String(contentsOf: url, encoding: .utf8), disk != text else { return }
+        text = disk
         scheduleCompile()
     }
 
@@ -112,10 +157,14 @@ func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased
     func reload() {
         refresh()
         if let current, !files.contains(current) { open(nil) }
-        guard let current, isEditingText,
-              let disk = try? String(contentsOf: root.appendingPathComponent(current), encoding: .utf8), disk != text else { return }
-        text = disk
-        scheduleCompile()
+        checkDisk()
+    }
+
+    /// Remet une ancienne version ; la version actuelle part d'abord dans l'historique.
+    func restore(_ snapshot: Snapshot) {
+        guard let current else { return }
+        saveSnapshot(text, root: root, file: current)
+        edit(snapshot.text)
     }
 
     /// Message d'erreur, ou nil si le fichier est créé et ouvert.
@@ -172,6 +221,7 @@ func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased
         }
         if compiling { pending = true; return }  // une seule compilation à la fois dans le même dossier
         compiling = true
+        outline = documentOutline(main) { [root] in try? String(contentsOf: root.appendingPathComponent($0), encoding: .utf8) }
         Task {
             let start = ContinuousClock.now
             let build = await latexmk(root: root, main: main, outDir: outDir)
@@ -222,18 +272,32 @@ func ext(_ path: String) -> String { (path as NSString).pathExtension.lowercased
         }
     }
 
-    // MARK: Photo
+    // MARK: Complétion et photo
 
+    func projectSources() -> CompletionSources {
+        completionSources(files.filter { ["tex", "bib"].contains(ext($0)) }.compactMap { file in
+            (try? String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)).map { (file, $0) }
+        })
+    }
+
+    /// Lit la formule d'une photo (ou d'un tracé InkML), puis la montre pour vérification avant de l'insérer.
     func readPhoto(_ file: URL) {
+        guard !reading, isEditingText else { return }
         reading = true
         Task {
-            defer { reading = false }
-            let r = await run(repo.appendingPathComponent(".venv/bin/python").path, ["predict.py", file.path], in: repo)
-            guard r.status == 0, let latex = prediction(r.out, file: file.lastPathComponent) else {
-                log.insert(LogItem(kind: .error, message: "Lecture impossible de « \(file.lastPathComponent) »."), at: 0)
-                return
+            let result = await Predictor.shared.read(file)
+            reading = false
+            switch result {
+            case .success(let latex): review = FormulaReview(photo: file, latex: latex)
+            case .failure(let error):
+                log.insert(LogItem(kind: .error, message: "Lecture impossible de « \(file.lastPathComponent) » : \(error.message)"), at: 0)
             }
-            editor.insertFormula(latex)
         }
     }
+}
+
+struct FormulaReview: Identifiable {
+    let id = UUID()
+    let photo: URL
+    let latex: String
 }

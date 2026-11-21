@@ -1,5 +1,6 @@
-// Autocomplétion des commandes LaTeX : liste des commandes courantes et choix des propositions.
+// Autocomplétion LaTeX (commandes, labels, citations, environnements) et éditeur qui l'utilise.
 import AppKit
+import UniformTypeIdentifiers
 
 /// Commandes courantes, les plus utilisées d'abord (c'est l'ordre des propositions),
 /// avec leur nombre d'arguments obligatoires : « frac:2 » insère \frac{}{}.
@@ -46,16 +47,161 @@ func commandPrefixRange(_ text: NSString, cursor: Int) -> NSRange? {
     return NSRange(location: start, length: cursor - start)
 }
 
-/// Éditeur avec complétion sans insertion provisoire : le choix n'est inséré qu'avec Entrée ou Tab,
-/// suivi des accolades des arguments, curseur dans la première.
+// MARK: - Arguments : \ref{…}, \cite{…}, \begin{…}
+
+enum CompletionKind { case command, label, citation, environment }
+
+let labelCommands: Set = ["ref", "eqref", "pageref", "cref", "Cref", "autoref", "nameref", "vref"]
+let citeCommands: Set = ["cite", "citep", "citet", "parencite", "textcite", "autocite", "nocite", "footcite"]
+
+let commonEnvironments = """
+equation equation* align align* itemize enumerate figure table tabular center cases pmatrix bmatrix matrix \
+gather gather* multline split array theorem proof definition lemma proposition corollary remark example \
+description quote abstract minipage verbatim frame
+""".split(whereSeparator: \.isWhitespace).map(String.init)
+
+/// Ce qu'on complète au curseur : une commande (« \fr »), un label (« \ref{eq: »), une clé de
+/// bibliographie (« \cite{knuth, la »), un environnement (« \begin{al »), et la plage à remplacer.
+func completionContext(_ text: NSString, cursor: Int) -> (kind: CompletionKind, command: String, range: NSRange)? {
+    if let r = commandPrefixRange(text, cursor: cursor) { return (.command, "", r) }
+    let lineStart = text.lineRange(for: NSRange(location: min(cursor, text.length), length: 0)).location
+    let before = text.substring(with: NSRange(location: lineStart, length: cursor - lineStart))
+    guard let m = before.firstMatch(of: #/\\([A-Za-z]+)\*?(?:\[[^\]]*\])?\{([^{}]*)$/#) else { return nil }
+    let command = String(m.1)
+    let kind: CompletionKind
+    if labelCommands.contains(command) { kind = .label }
+    else if citeCommands.contains(command) { kind = .citation }
+    else if command == "begin" || command == "end" { kind = .environment }
+    else { return nil }
+    let typed = kind == .citation ? String(m.2.split(separator: ",", omittingEmptySubsequences: false).last ?? "")
+        .trimmingCharacters(in: .whitespaces) : String(m.2)
+    let length = (typed as NSString).length
+    return (kind, command, NSRange(location: cursor - length, length: length))
+}
+
+/// Labels, clés de bibliographie et environnements trouvés dans les fichiers du projet.
+struct CompletionSources {
+    var labels: [String] = []
+    var citations: [String] = []
+    var environments: [String] = []
+}
+
+func completionSources(_ files: [(name: String, text: String)]) -> CompletionSources {
+    var s = CompletionSources()
+    for (name, text) in files {
+        if ext(name) == "bib" {
+            s.citations += text.matches(of: #/@(?!comment|string|preamble)\w+\s*\{\s*([^,\s]+)\s*,/#.ignoresCase()).map { String($0.1) }
+        } else {
+            s.labels += text.matches(of: #/\\label\{([^}]+)\}/#).map { String($0.1) }
+            s.environments += text.matches(of: #/\\begin\{([^}]+)\}/#).map { String($0.1) }
+        }
+    }
+    return s
+}
+
+/// Ceux qui commencent par ce qui est tapé, puis ceux qui le contiennent ; sans doublons.
+func rank(_ items: [String], prefix: String) -> [String] {
+    var seen = Set<String>()
+    let unique = items.filter { seen.insert($0).inserted }
+    let lower = prefix.lowercased()
+    let starts = unique.filter { $0.hasPrefix(prefix) }
+    let contains = unique.filter { !$0.hasPrefix(prefix) && (lower.isEmpty || $0.lowercased().contains(lower)) }
+    return Array((starts + contains).prefix(40))
+}
+
+/// Une photo de formule qu'on peut lire : image ou tracé InkML.
+func isPhoto(_ url: URL) -> Bool {
+    url.pathExtension.lowercased() == "inkml" || UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
+}
+
+/// Image du presse-papiers ou d'un glisser-déposer, écrite en PNG temporaire pour le lecteur de formules.
+func savePNG(_ image: NSImage) -> URL? {
+    guard let tiff = image.tiffRepresentation,
+          let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return nil }
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-\(UUID().uuidString).png")
+    return (try? png.write(to: url)) != nil ? url : nil
+}
+
+// MARK: - Éditeur
+
+/// Éditeur avec complétion sans insertion provisoire : le choix n'est inséré qu'avec Entrée ou Tab.
+/// Une commande reçoit ses accolades (curseur dans la première), un \begin{…} reçoit son \end{…}.
+/// Coller ou déposer une image lance la lecture de formule.
 final class LaTeXTextView: NSTextView {
+    var onPhoto: ((URL) -> Void)?
+
+    override var rangeForUserCompletion: NSRange {
+        completionContext(string as NSString, cursor: selectedRange().location)?.range ?? super.rangeForUserCompletion
+    }
+
     override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange, movement: Int, isFinal flag: Bool) {
         guard flag, movement == NSTextMovement.return.rawValue || movement == NSTextMovement.tab.rawValue else { return }
+        let context = completionContext(string as NSString, cursor: NSMaxRange(charRange))
         super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: true)
-        let args = commandArity[word] ?? 0
-        guard args > 0 else { return }
+        switch context?.kind {
+        case .command?:
+            let args = commandArity[word] ?? 0
+            guard args > 0 else { return }
+            let at = selectedRange().location
+            insertText(String(repeating: "{}", count: args), replacementRange: NSRange(location: at, length: 0))
+            setSelectedRange(NSRange(location: at + 1, length: 0))
+            if word == "begin" || labelCommands.contains(word) || citeCommands.contains(word) {
+                DispatchQueue.main.async { self.complete(nil) }  // enchaîne sur le nom de l'environnement, du label…
+            }
+        case .environment? where context?.command == "begin":
+            closeEnvironment(word)
+        case .label?, .citation?, .environment?:
+            closeBrace()
+        case nil:
+            break
+        }
+    }
+
+    /// Ferme l'argument s'il ne l'est pas déjà, curseur après l'accolade.
+    private func closeBrace() {
+        let ns = string as NSString
         let at = selectedRange().location
-        insertText(String(repeating: "{}", count: args), replacementRange: NSRange(location: at, length: 0))
-        setSelectedRange(NSRange(location: at + 1, length: 0))
+        if at < ns.length, ns.character(at: at) == 0x7D { setSelectedRange(NSRange(location: at + 1, length: 0)); return }
+        insertText("}", replacementRange: NSRange(location: at, length: 0))
+    }
+
+    /// Après \begin{nom} : ferme l'accolade, ajoute \end{nom} s'il manque, curseur sur la ligne du milieu.
+    private func closeEnvironment(_ name: String) {
+        let ns = string as NSString
+        var at = selectedRange().location
+        if at < ns.length, ns.character(at: at) == 0x7D { at += 1 } else {  // 0x7D : « } »
+            insertText("}", replacementRange: NSRange(location: at, length: 0))
+            at += 1
+        }
+        let begins = string.components(separatedBy: "\\begin{\(name)}").count, ends = string.components(separatedBy: "\\end{\(name)}").count
+        if begins > ends {
+            insertText("\n\n\\end{\(name)}", replacementRange: NSRange(location: at, length: 0))
+            at += 1
+        }
+        setSelectedRange(NSRange(location: at, length: 0))
+    }
+
+    override func paste(_ sender: Any?) {
+        let board = NSPasteboard.general
+        if board.string(forType: .string) == nil, let image = NSImage(pasteboard: board), let url = savePNG(image), let onPhoto {
+            onPhoto(url)  // capture d'écran copiée (⌃⇧⌘4) : on lit la formule
+            return
+        }
+        super.paste(sender)
+    }
+
+    // Sans ces types, un éditeur en texte brut grise « Coller » quand le presse-papiers ne contient qu'une image.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] { super.readablePasteboardTypes + [.png, .tiff] }
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] { super.acceptableDragTypes + [.fileURL, .png, .tiff] }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let board = sender.draggingPasteboard
+        let file = (board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL])?.first(where: isPhoto)
+        let photo = file ?? (board.string(forType: .string) == nil ? NSImage(pasteboard: board).flatMap(savePNG) : nil)
+        guard let photo, let onPhoto else { return super.performDragOperation(sender) }
+        // La formule ira là où on a lâché l'image.
+        setSelectedRange(NSRange(location: characterIndexForInsertion(at: convert(sender.draggingLocation, from: nil)), length: 0))
+        onPhoto(photo)
+        return true
     }
 }

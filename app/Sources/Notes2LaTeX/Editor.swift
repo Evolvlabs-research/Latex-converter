@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor final class EditorController {
     weak var textView: NSTextView?
     var pendingLine: Int?  // ligne à montrer dès que le fichier demandé est affiché
+    var sources: () -> CompletionSources = { CompletionSources() }  // labels, clés, environnements du projet
+    var onPhoto: (URL) -> Void = { _ in }  // image collée ou déposée dans l'éditeur
 
     var currentLine: Int {
         guard let tv = textView else { return 1 }
@@ -43,18 +45,24 @@ struct LaTeXEditor: NSViewRepresentable {
     @Binding var text: String
     let controller: EditorController
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, controller: controller) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
-        let tv = LaTeXTextView()
+        let tv = LaTeXTextView(usingTextLayoutManager: false)  // TextKit 1 : la marge des numéros lit le layoutManager
         tv.autoresizingMask = [.width]
         tv.isVerticallyResizable = true
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         tv.textContainer?.widthTracksTextView = true
         scroll.documentView = tv
+        scroll.verticalRulerView = LineNumberRuler(textView: tv)
+        scroll.hasVerticalRuler = true
+        scroll.rulersVisible = true
+        tv.usesFindBar = true  // ⌘F : rechercher et remplacer dans le fichier
+        tv.isIncrementalSearchingEnabled = true
         tv.delegate = context.coordinator
+        tv.onPhoto = { controller.onPhoto($0) }
         tv.isRichText = false
         tv.allowsUndo = true
         // LaTeX : ni guillemets courbes, ni tirets longs, ni correction automatique.
@@ -91,11 +99,15 @@ struct LaTeXEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         let text: Binding<String>
-        private var typedLetter = false
-        init(text: Binding<String>) { self.text = text }
+        let controller: EditorController
+        private var typed: Character?  // caractère tapé au clavier (pas un collage ni une complétion)
+        init(text: Binding<String>, controller: EditorController) {
+            self.text = text
+            self.controller = controller
+        }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString string: String?) -> Bool {
-            typedLetter = string?.count == 1 && string?.first?.isLetter == true
+            typed = string?.count == 1 ? string?.first : nil
             return true
         }
 
@@ -103,9 +115,10 @@ struct LaTeXEditor: NSViewRepresentable {
             guard let tv = notification.object as? NSTextView else { return }
             highlight(tv.textStorage!)
             text.wrappedValue = tv.string
-            // Une lettre tapée dans « \… » : ouvrir la liste (après la frappe, pas pendant).
-            if typedLetter, tv.selectedRange().length == 0,
-               commandPrefixRange(tv.string as NSString, cursor: tv.selectedRange().location) != nil {
+            // Frappe dans « \fr », « \ref{ », « \cite{ », « \begin{ » : ouvrir la liste (après la frappe, pas pendant).
+            guard let typed, tv.selectedRange().length == 0,
+                  let context = completionContext(tv.string as NSString, cursor: tv.selectedRange().location) else { return }
+            if context.kind == .command ? typed.isLetter : !" }".contains(typed) {
                 DispatchQueue.main.async { tv.complete(nil) }
             }
         }
@@ -113,9 +126,16 @@ struct LaTeXEditor: NSViewRepresentable {
         func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange charRange: NSRange,
                       indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
             let ns = textView.string as NSString
-            guard let range = commandPrefixRange(ns, cursor: NSMaxRange(charRange)), range == charRange else { return [] }
+            guard let context = completionContext(ns, cursor: NSMaxRange(charRange)), context.range == charRange else { return [] }
             index?.pointee = 0
-            return commandCompletions(prefix: ns.substring(with: charRange), in: textView.string)
+            let typed = ns.substring(with: charRange)
+            switch context.kind {
+            case .command: return commandCompletions(prefix: typed, in: textView.string)
+            case .label: return rank(controller.sources().labels, prefix: typed)
+            case .citation: return rank(controller.sources().citations, prefix: typed)
+            case .environment:  // le fichier contient déjà « \begin{al » en cours de frappe : pas « al » dans la liste
+                return rank(commonEnvironments + controller.sources().environments.filter { $0 != typed }, prefix: typed)
+            }
         }
     }
 }
@@ -162,4 +182,63 @@ func insertionPoint(in text: String, cursor: Int) -> Int {
     let begin = ns.range(of: "\\begin{document}")
     let bodyStart = begin.location == NSNotFound ? 0 : NSMaxRange(ns.lineRange(for: begin))
     return cursor >= bodyStart && cursor <= end.location ? lineStart : end.location
+}
+
+/// Numéros de ligne dans la marge : un par ligne du fichier (une ligne coupée à l'affichage garde un seul numéro),
+/// celui de la ligne du curseur plus visible.
+final class LineNumberRuler: NSRulerView {
+    init(textView: NSTextView) {
+        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
+        clientView = textView
+        ruleThickness = 44
+        for name in [NSText.didChangeNotification, NSTextView.didChangeSelectionNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: name, object: textView)
+        }
+        textView.enclosingScrollView?.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSView.boundsDidChangeNotification,
+                                               object: textView.enclosingScrollView?.contentView)
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) non utilisé") }
+
+    @objc private func redraw() { needsDisplay = true }
+
+    // Depuis macOS 14 une vue peut dessiner hors de ses bords : sans ça, le fond de la marge recouvrait l'éditeur.
+    override var clipsToBounds: Bool { get { true } set {} }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.textBackgroundColor.setFill()
+        dirtyRect.intersection(bounds).fill()
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
+
+    override func drawHashMarksAndLabels(in rect: NSRect) {
+        guard let tv = clientView as? NSTextView, let lm = tv.layoutManager, let container = tv.textContainer else { return }
+        let ns = tv.string as NSString
+        let visible = lm.characterRange(forGlyphRange: lm.glyphRange(forBoundingRect: tv.visibleRect, in: container), actualGlyphRange: nil)
+        let cursor = tv.selectedRange().location
+        var line = ns.substring(to: visible.location).filter { $0 == "\n" }.count + 1
+        var index = visible.location
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+
+        func label(_ n: Int, at y: CGFloat, current: Bool) {
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: current ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor]
+            let s = "\(n)" as NSString
+            let size = s.size(withAttributes: attrs)
+            let top = convert(NSPoint(x: 0, y: y + tv.textContainerInset.height), from: tv).y
+            s.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: top + 3), withAttributes: attrs)
+        }
+
+        while index < NSMaxRange(visible) {
+            let range = ns.lineRange(for: NSRange(location: index, length: 0))
+            let fragment = lm.lineFragmentRect(forGlyphAt: lm.glyphIndexForCharacter(at: index), effectiveRange: nil)
+            label(line, at: fragment.minY, current: cursor >= range.location && cursor < NSMaxRange(range))
+            line += 1
+            index = NSMaxRange(range)
+        }
+        // Ligne vide après le dernier saut de ligne : elle a aussi son numéro.
+        if NSMaxRange(visible) == ns.length, ns.length == 0 || ns.character(at: ns.length - 1) == 10 {
+            label(line, at: lm.extraLineFragmentRect.minY, current: cursor == ns.length)
+        }
+    }
 }

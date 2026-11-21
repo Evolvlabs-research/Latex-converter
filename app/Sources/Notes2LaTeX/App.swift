@@ -13,6 +13,7 @@ struct Notes2LaTeXApp: App {
             .defaultSize(width: 1320, height: 820)
             .commands {
                 CommandGroup(after: .saveItem) { ExportPDFCommand() }
+                CommandGroup(after: .pasteboard) { FindCommands() }
                 CommandGroup(after: .toolbar) {
                     Picker("Apparence", selection: $appearance) {
                         Text("Comme le système").tag("system")
@@ -39,6 +40,24 @@ struct ExportPDFCommand: View {
         Button("Exporter en PDF…") { export?() }
             .keyboardShortcut("e")
             .disabled(export == nil)
+    }
+}
+
+/// SwiftUI ne met pas de « Rechercher » dans le menu Édition : on envoie l'action à l'éditeur actif,
+/// qui lit le type de recherche dans le tag de l'expéditeur.
+struct FindCommands: View {
+    var body: some View {
+        Divider()
+        Button("Rechercher…") { find(.showFindInterface) }.keyboardShortcut("f")
+        Button("Rechercher et remplacer…") { find(.showReplaceInterface) }.keyboardShortcut("f", modifiers: [.command, .option])
+        Button("Occurrence suivante") { find(.nextMatch) }.keyboardShortcut("g")
+        Button("Occurrence précédente") { find(.previousMatch) }.keyboardShortcut("g", modifiers: [.command, .shift])
+    }
+
+    func find(_ action: NSTextFinder.Action) {
+        let sender = NSMenuItem()
+        sender.tag = action.rawValue
+        NSApp.sendAction(#selector(NSTextView.performFindPanelAction(_:)), to: nil, from: sender)
     }
 }
 
@@ -94,19 +113,27 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
                 Text("Nabla").font(.largeTitle.weight(.semibold))
                 Text("Vos projets LaTeX, compilés sur ce Mac.").foregroundStyle(.secondary)
-                VStack(spacing: 10) {
-                    Button(action: newProject) {
-                        Label("Nouveau projet", systemImage: "plus").frame(maxWidth: .infinity)
+                Text("Nouveau projet").font(.headline).padding(.top, 18)
+                HStack(spacing: 12) {
+                    ForEach(projectTemplates) { template in
+                        Button { newProject(template) } label: {
+                            VStack(spacing: 8) {
+                                Image(systemName: template.icon).font(.system(size: 24, weight: .light)).frame(height: 30)
+                                Text(template.name).font(.callout)
+                            }
+                            .frame(width: 104, height: 88)
+                            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Nouveau projet à partir du modèle « \(template.name) »")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-                    Button(action: openPanel) {
-                        Label("Ouvrir un dossier ou un .tex…", systemImage: "folder").frame(maxWidth: .infinity)
-                    }
-                    .keyboardShortcut("o")
+                }
+                Button(action: openPanel) {
+                    Label("Ouvrir un dossier ou un .tex…", systemImage: "folder")
                 }
                 .controlSize(.large)
-                .frame(width: 260)
+                .keyboardShortcut("o")
                 .padding(.top, 10)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -137,11 +164,11 @@ struct WelcomeView: View {
             .listStyle(.sidebar)
             .frame(width: 320)
         }
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(minWidth: 960, minHeight: 520)
         .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") {} }
     }
 
-    func newProject() {
+    func newProject(_ template: ProjectTemplate) {
         let panel = NSSavePanel()
         panel.title = "Nouveau projet"
         panel.prompt = "Créer"
@@ -149,7 +176,7 @@ struct WelcomeView: View {
         panel.nameFieldStringValue = "Sans titre"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let error = createProject(at: url) { message = error } else { open(url) }
+        if let error = createProject(at: url, template: template.main) { message = error } else { open(url) }
     }
 
     func openPanel() {
