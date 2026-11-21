@@ -6,7 +6,7 @@ import torch
 from PIL import Image, ImageOps
 
 from data import HEIGHT, MARGIN, MAX_WIDTH, Vocab, detokenize, read_inkml, render, to_tensor
-from model import Im2Latex
+from model import load_checkpoint
 
 
 def load_photo(path: Path) -> Image.Image:
@@ -30,16 +30,12 @@ def main():
     p.add_argument("--ckpt", type=Path, default=Path("checkpoints/best.pt"))
     args = p.parse_args()
 
-    ckpt = torch.load(args.ckpt, map_location="cpu")
-    vocab = Vocab([])
-    vocab.itos = ckpt["vocab"]
-    model = Im2Latex(len(vocab.itos))
-    model.load_state_dict(ckpt["model"])
-    model.eval()
+    model, itos = load_checkpoint(args.ckpt)
+    vocab = Vocab(itos)
 
     for f in args.files:
         img = render(read_inkml(f)[0]) if f.suffix == ".inkml" else load_photo(f)
-        ids = model.greedy(to_tensor(img)[None], torch.tensor([img.width]))[0]
+        ids = model.beam_search(to_tensor(img)[None], torch.tensor([img.width]))[0]
         print(f"{f.name}: {detokenize(vocab.decode(ids))}")
 
 

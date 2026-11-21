@@ -47,16 +47,34 @@ class Im2Latex(nn.Module):
         return self.decode(*self.encode(x, widths), y_in)
 
     @torch.no_grad()
-    def greedy(self, x, widths, max_len: int = MAX_LEN) -> list[list[int]]:
+    def beam_search(self, x, widths, k: int = 5, max_len: int = MAX_LEN) -> list[list[int]]:
+        """Garde les k débuts de formule les plus probables à chaque pas ; k=1 : décodage glouton."""
         memory, mask = self.encode(x, widths)
-        y = torch.full((x.shape[0], 1), BOS, device=x.device)
-        done = torch.zeros(x.shape[0], dtype=torch.bool, device=x.device)
+        b, dev = x.shape[0], x.device
+        memory, mask = memory.repeat_interleave(k, 0), mask.repeat_interleave(k, 0)
+        y = torch.full((b * k, 1), BOS, device=dev)
+        scores = torch.full((b, k), float("-inf"), device=dev)
+        scores[:, 0] = 0  # au départ, une seule hypothèse par image
+        done = torch.zeros(b * k, dtype=torch.bool, device=dev)
         for _ in range(max_len - 1):
-            nxt = self.decode(memory, mask, y)[:, -1].argmax(-1)
-            nxt = nxt.masked_fill(done, PAD)
-            y = torch.cat([y, nxt[:, None]], 1)
-            done |= nxt == EOS
+            logp = self.decode(memory, mask, y)[:, -1].float().log_softmax(-1)
+            logp[done] = float("-inf")
+            logp[done, PAD] = 0  # une hypothèse finie ne s'allonge que de PAD, sans coût
+            v = logp.shape[-1]
+            scores, idx = (scores.view(-1, 1) + logp).view(b, k * v).topk(k, -1)
+            src = (idx // v + torch.arange(b, device=dev)[:, None] * k).view(-1)
+            tok = (idx % v).view(-1)
+            y = torch.cat([y[src], tok[:, None]], 1)
+            done = done[src] | (tok == EOS)
             if done.all():
                 break
-        rows = y[:, 1:].tolist()  # sans BOS ; on coupe au premier EOS
+        rows = y.view(b, k, -1)[torch.arange(b, device=dev), scores.argmax(-1), 1:].tolist()  # sans BOS
         return [r[: r.index(EOS)] if EOS in r else r for r in rows]
+
+
+def load_checkpoint(path, device: str = "cpu"):
+    """-> (modèle en mode évaluation, liste des tokens)."""
+    ckpt = torch.load(path, map_location="cpu")
+    model = Im2Latex(len(ckpt["vocab"]), **ckpt.get("config", {}))
+    model.load_state_dict(ckpt["model"])
+    return model.to(device).eval(), ckpt["vocab"]

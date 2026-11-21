@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 
 from data import PAD, MathWriting, Vocab, WidthBatches, collate, load_split
 from model import Im2Latex
@@ -19,7 +19,7 @@ def exact_match(model, loader, device, max_batches: int) -> float:
         if b == max_batches:
             break
         # au-delà de la longueur de la vraie formule, la prédiction est fausse : inutile de décoder plus loin
-        for pred, gold in zip(model.greedy(x.to(device), widths, max_len=y.shape[1] + 1), y[:, 1:].tolist()):
+        for pred, gold in zip(model.beam_search(x.to(device), widths, 1, max_len=y.shape[1] + 1), y[:, 1:].tolist()):
             ok += pred == [t for t in gold if t != PAD][:-1]  # gold sans EOS ni PAD
             n += 1
     model.train()
@@ -30,28 +30,34 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data", type=Path, default=Path("data/mathwriting-2024"))
     p.add_argument("--out", type=Path, default=Path("checkpoints"))
-    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--epochs", type=int, default=10)  # ~45 min par époque sur Mac avec les synthétiques
     p.add_argument("--batch", type=int, default=64)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--limit", type=int, help="n'utiliser que N exemples (test de surapprentissage)")
+    p.add_argument("--no-synthetic", action="store_true", help="sans les 396 000 formules synthétiques")
+    p.add_argument("--d", type=int, default=384, help="largeur du modèle")
+    p.add_argument("--layers", type=int, default=4, help="couches du décodeur")
     # 0 : avec le cache, préparer un lot prend ~16 ms ; sur Mac, des processus séparés le ralentissent (×30 à 10)
     p.add_argument("--workers", type=int, default=0)
     args = p.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
-    # shortcut: seul le split « train » (humain) sert ; ajouter « synthetic » quand le modèle plafonne.
-    vocab = Vocab([t for toks in load_split(args.data, "train")["tokens"] for t in toks])
     overfit = args.limit is not None
-    train = MathWriting(args.data, "train", vocab, augment=not overfit, limit=args.limit)
+    splits = ["train"] if overfit or args.no_synthetic else ["train", "synthetic"]
+    vocab = Vocab([t for s in splits for toks in load_split(args.data, s)["tokens"] for t in toks])
+    parts = [MathWriting(args.data, s, vocab, augment=not overfit, limit=args.limit) for s in splits]
+    train = ConcatDataset(parts)
+    train.widths = [w for part in parts for w in part.widths]
     # en test de surapprentissage, on évalue sur les mêmes exemples
-    val = train if overfit else MathWriting(args.data, "valid", vocab)
+    val = parts[0] if overfit else MathWriting(args.data, "valid", vocab)
     tl = DataLoader(train, batch_sampler=WidthBatches(train.widths, args.batch), collate_fn=collate,
                     num_workers=args.workers, persistent_workers=args.workers > 0)
     # graine fixe : les 30 lots évalués sont les mêmes à chaque époque, et de toutes les largeurs
     vl = DataLoader(val, batch_sampler=WidthBatches(val.widths, args.batch, seed=0), collate_fn=collate,
                     num_workers=args.workers)
 
-    model = Im2Latex(len(vocab)).to(device)
+    config = {"d": args.d, "layers": args.layers}
+    model = Im2Latex(len(vocab), **config).to(device)
     print(f"{sum(p.numel() for p in model.parameters()) / 1e6:.1f} M paramètres, {len(vocab)} tokens, "
           f"{len(train)} exemples, appareil {device}")
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
@@ -78,7 +84,7 @@ def main():
               flush=True)
         if em > best:
             best = em
-            torch.save({"model": model.state_dict(), "vocab": vocab.itos}, args.out / "best.pt")
+            torch.save({"model": model.state_dict(), "vocab": vocab.itos, "config": config}, args.out / "best.pt")
     (args.out / "vocab.json").write_text(json.dumps(vocab.itos))
 
 

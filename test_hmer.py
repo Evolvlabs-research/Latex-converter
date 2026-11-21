@@ -7,7 +7,7 @@ import torch
 from data import (EOS, HEIGHT, MAX_WIDTH, MathWriting, Vocab, WidthBatches, collate, detokenize, read_inkml,
                   render, to_tensor, tokenize)
 from evaluate import edit_distance
-from model import Im2Latex
+from model import Im2Latex, load_checkpoint
 
 # tokenizer
 toks = tokenize(r"\frac{a}{b}+\alpha x\{")
@@ -26,8 +26,21 @@ batch = [(to_tensor(render([[(0, 0), (w, 10)]])), torch.tensor(v.encode(toks))) 
 x, widths, y = collate(batch)
 m = Im2Latex(len(v)).eval()
 assert m(x, widths, y[:, :-1]).shape == (2, y.shape[1] - 1, len(v))
-out = m.greedy(x, widths, max_len=8)
-assert len(out) == 2 and all(len(o) <= 7 and EOS not in o for o in out)
+for k in (1, 3):
+    out = m.beam_search(x, widths, k, max_len=8)
+    assert len(out) == 2 and all(len(o) <= 7 and EOS not in o for o in out), out
+# k=1 : exactement l'argmax pas à pas
+memory, mask = m.encode(x, widths)
+ys = torch.full((2, 1), 1)
+for _ in range(3):
+    ys = torch.cat([ys, m.decode(memory, mask, ys)[:, -1].argmax(-1, keepdim=True)], 1)
+assert all(o == r[:len(o)] for o, r in zip(m.beam_search(x, widths, 1, max_len=4), ys[:, 1:].tolist()))
+# sauvegarde : la taille du modèle voyage avec le checkpoint
+big = Im2Latex(len(v), d=128, layers=2)
+ck = Path(tempfile.mkdtemp()) / "c.pt"
+torch.save({"model": big.state_dict(), "vocab": v.itos, "config": {"d": 128, "layers": 2}}, ck)
+m2, itos = load_checkpoint(ck)
+assert itos == v.itos and Vocab(itos).itos == v.itos and m2.out.in_features == 128
 # collate : tailles arrondies (largeur à 128 px, longueur à 16 tokens)
 assert x.shape[-1] % 128 == 0 and y.shape[1] % 16 == 0 and widths.tolist() == [b[0].shape[-1] for b in batch]
 

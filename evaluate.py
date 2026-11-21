@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from data import PAD, MathWriting, Vocab, WidthBatches, collate, detokenize
-from model import Im2Latex
+from model import load_checkpoint
 
 BUCKETS = [(1, 10), (11, 25), (26, 50), (51, 10_000)]  # longueur de la formule, en tokens
 
@@ -33,15 +33,12 @@ def main():
     p.add_argument("--ckpt", type=Path, default=Path("checkpoints/best.pt"))
     p.add_argument("--split", default="test")
     p.add_argument("--limit", type=int)
+    p.add_argument("--beam", type=int, default=5, help="1 : décodage glouton")
     args = p.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
-    ckpt = torch.load(args.ckpt, map_location="cpu")
-    vocab = Vocab([])
-    vocab.itos, vocab.stoi = ckpt["vocab"], {t: i for i, t in enumerate(ckpt["vocab"])}
-    model = Im2Latex(len(vocab)).to(device)
-    model.load_state_dict(ckpt["model"])
-    model.eval()
+    model, itos = load_checkpoint(args.ckpt, device)
+    vocab = Vocab(itos)  # itos est déjà trié : Vocab le reconstruit à l'identique
     ds = MathWriting(args.data, args.split, vocab, limit=args.limit)
     dl = DataLoader(ds, batch_sampler=WidthBatches(ds.widths, 64, seed=0), collate_fn=collate)
 
@@ -49,7 +46,7 @@ def main():
     t0 = time.time()
     for x, widths, y in dl:
         # gold + 2 tokens suffisent pour compter jusqu'à 2 erreurs
-        preds = model.greedy(x.to(device), widths, max_len=y.shape[1] + 1)
+        preds = model.beam_search(x.to(device), widths, args.beam, max_len=y.shape[1] + 1)
         for pred, gold in zip(preds, y[:, 1:].tolist()):
             gold = [t for t in gold if t != PAD][:-1]  # sans EOS ni PAD
             d = edit_distance(pred, gold)
@@ -62,6 +59,7 @@ def main():
     n = len(dists)
     stats = {
         "split": args.split,
+        "beam": args.beam,
         "formules": n,
         "exactes": sum(d == 0 for d in dists) / n,
         "≤1 erreur": sum(d <= 1 for d in dists) / n,
@@ -77,7 +75,7 @@ def main():
         },
         "exemples d'erreurs": examples,
     }
-    out = args.ckpt.parent / f"{args.split}_stats.json"
+    out = args.ckpt.parent / f"{args.split}_beam{args.beam}_stats.json"
     out.write_text(json.dumps(stats, ensure_ascii=False, indent=2))
     print(json.dumps({k: v for k, v in stats.items() if k != "exemples d'erreurs"}, ensure_ascii=False, indent=2))
     print(f"Détail et exemples d'erreurs : {out}")
