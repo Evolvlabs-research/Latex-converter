@@ -6,6 +6,7 @@ import torch
 
 from data import (EOS, HEIGHT, MAX_WIDTH, MathWriting, Vocab, WidthBatches, collate, detokenize, read_inkml,
                   render, to_tensor, tokenize)
+from evaluate import edit_distance
 from model import Im2Latex
 
 # tokenizer
@@ -50,4 +51,9 @@ ref = to_tensor(render(read_inkml(root / "train" / "a.inkml")[0]))
 assert len(ds) == 1 and seq.tolist() == ds.seqs[0]
 assert img.shape == ref.shape and (img - ref).abs().mean() < 0.01
 assert ds.widths[0] == img.shape[-1]
+
+# distance d'édition (évaluation)
+assert edit_distance([], []) == 0 and edit_distance([1, 2, 3], []) == 3 and edit_distance([], [1]) == 1
+assert edit_distance([1, 2, 3], [1, 3]) == 1 and edit_distance([1, 2, 3], [1, 4, 3]) == 1
+assert edit_distance([1, 2, 3, 4], [2, 1, 3, 5]) == 3
 print("OK")
