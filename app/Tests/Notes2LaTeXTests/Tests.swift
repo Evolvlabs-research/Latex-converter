@@ -51,6 +51,22 @@ final class Tests: XCTestCase {
         XCTAssertEqual(commandPrefixRange("é\\al" as NSString, cursor: 4), NSRange(location: 2, length: 2))
     }
 
+    /// Paquet absent : TeX écrit la cause sur une ligne « ! », puis « Emergency stop » avec le fichier et la ligne.
+    func testParseLogMissingPackage() {
+        let log = """
+        ! LaTeX Error: File `academy.sty' not found.
+
+        Type X to quit or <RETURN> to proceed,
+        Enter file name:
+        ./main.tex:3: Emergency stop.
+        <read *>
+        ./main.tex:3:  ==> Fatal error occurred, no output PDF file produced!
+        """
+        XCTAssertEqual(parseLog(log, root: URL(fileURLWithPath: "/p")), [LogItem(
+            kind: .error, file: "main.tex", line: 3,
+            message: "Fichier « academy.sty » introuvable : ajoutez-le au projet (+ › Importer des fichiers) ou installez le paquet qui le fournit.")])
+    }
+
     func testEngineFlag() {
         XCTAssertEqual(engineFlag("% !TEX program = XeLaTeX\n\\documentclass{article}"), "-pdfxe")
         XCTAssertEqual(engineFlag("\\documentclass{article}"), "-pdf")

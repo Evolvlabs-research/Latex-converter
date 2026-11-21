@@ -84,18 +84,32 @@ func engineFlag(_ source: String) -> String {
 /// Erreurs (format -file-line-error : « ./chap/a.tex:4: message ») et avertissements du journal TeX.
 func parseLog(_ log: String, root: URL) -> [LogItem] {
     var items: [LogItem] = []
+    var cause: String?  // dernière ligne « ! … » : la vraie raison d'un « Emergency stop »
     for line in log.split(separator: "\n") {
-        if let m = line.wholeMatch(of: #/(.+?\.\w+):(\d+): (.+)/#) {
-            items.append(LogItem(kind: .error, file: relativePath(String(m.1), root: root), line: Int(m.2), message: String(m.3)))
+        if line.hasPrefix("! ") {
+            cause = String(line.dropFirst(2))
+        } else if let m = line.wholeMatch(of: #/(.+?\.\w+):(\d+): (.+)/#) {
+            var message = String(m.3)
+            if message.contains("==> Fatal error") { continue }  // répète l'erreur précédente
+            if message == "Emergency stop.", let cause { message = cause }
+            items.append(LogItem(kind: .error, file: relativePath(String(m.1), root: root), line: Int(m.2), message: explain(message)))
         } else if let m = line.wholeMatch(of: #/(?:LaTeX|Package \w+|Class \w+) Warning: (.+?)(?: on input line (\d+))?\.?/#) {
             items.append(LogItem(kind: .warning, line: m.2.flatMap { Int($0) }, message: String(m.1)))
         }
     }
-    if !items.contains(where: { $0.kind == .error }) {  // erreurs sans fichier : arrêt d'urgence…
-        items += log.split(separator: "\n").filter { $0.hasPrefix("! ") }
-            .map { LogItem(kind: .error, message: String($0.dropFirst(2))) }
+    if !items.contains(where: { $0.kind == .error }) {  // erreurs sans fichier ni ligne
+        items += log.split(separator: "\n").filter { $0.hasPrefix("! ") && !$0.contains("==> Fatal error") }
+            .map { LogItem(kind: .error, message: explain(String($0.dropFirst(2)))) }
     }
     return items
+}
+
+/// Message TeX rendu compréhensible quand on sait quoi faire.
+func explain(_ message: String) -> String {
+    if let m = message.firstMatch(of: #/File `([^']+)' not found/#) {
+        return "Fichier « \(m.1) » introuvable : ajoutez-le au projet (+ › Importer des fichiers) ou installez le paquet qui le fournit."
+    }
+    return message
 }
 
 /// Chemin relatif au projet (« ./chap/a.tex » ou chemin absolu dedans) ; nil s'il est hors du projet.
