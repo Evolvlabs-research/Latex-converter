@@ -1,151 +1,146 @@
-// Éditeur LaTeX avec aperçu PDF compilé en local (pdflatex) et lecture de formules manuscrites (predict.py).
-import PDFKit
+// notes2latex : projets LaTeX compilés sur ce Mac, avec lecture de formules manuscrites.
 import SwiftUI
 import UniformTypeIdentifiers
 
 @main
 struct Notes2LaTeXApp: App {
+    @AppStorage("appearance") private var appearance = "system"
+
     init() { NSApplication.shared.setActivationPolicy(.regular) }  // fenêtre au premier plan aussi avec `swift run`
-    var body: some Scene { WindowGroup("notes2latex") { ContentView() } }
-}
 
-let template = """
-\\documentclass{article}
-\\usepackage{amsmath,amssymb}
-\\begin{document}
-\\[
-\\int_0^1 x^2\\,dx = \\frac{1}{3}
-\\]
-\\end{document}
-"""
-
-// shortcut: chemin du dépôt figé à la compilation ; à remplacer par un réglage si l'app quitte ce dossier.
-let repo = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-
-struct ContentView: View {
-    @AppStorage("source") private var source = template  // le texte survit à la fermeture de l'app
-    @State private var pdf: PDFDocument?
-    @State private var log = ""
-    @State private var busy = false
-
-    var body: some View {
-        HSplitView {
-            TextEditor(text: $source)
-                .font(.system(.body, design: .monospaced))
-                .frame(minWidth: 320)
-            VStack(spacing: 0) {
-                PDFKitView(document: pdf).frame(minWidth: 320)
-                if !log.isEmpty {
-                    ScrollView {
-                        Text(log).font(.caption.monospaced()).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+    var body: some Scene {
+        WindowGroup("notes2latex") { RootView() }
+            .defaultSize(width: 1320, height: 820)
+            .commands {
+                CommandGroup(after: .toolbar) {
+                    Picker("Apparence", selection: $appearance) {
+                        Text("Comme le système").tag("system")
+                        Text("Clair").tag("light")
+                        Text("Sombre").tag("dark")
                     }
-                    .frame(height: 140).background(.red.opacity(0.08))
                 }
             }
-        }
-        .frame(minWidth: 800, minHeight: 500)
-        .toolbar {
-            if busy { ProgressView().controlSize(.small) }
-            Button("Photo → LaTeX", systemImage: "photo") { importPhoto() }.disabled(busy)
-            Button("Compiler", systemImage: "play.fill") { compile() }.keyboardShortcut("r").disabled(busy)
-        }
-        .task { compile() }
     }
+}
 
-    func compile() {
-        busy = true
-        let src = source
-        Task {
-            defer { busy = false }
-            guard let tex = findTool("pdflatex") else {
-                log = "pdflatex introuvable. Installer : brew install --cask mactex-no-gui"
-                return
-            }
-            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("notes2latex")
-            do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                try src.write(to: dir.appendingPathComponent("doc.tex"), atomically: true, encoding: .utf8)
-            } catch { log = error.localizedDescription; return }
-            let r = await run(tex, ["-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", "doc.tex"], in: dir)
-            if r.status == 0 {
-                pdf = PDFDocument(url: dir.appendingPathComponent("doc.pdf"))
-                log = ""
+struct RootView: View {
+    @State private var project: Project?
+    @AppStorage("recents") private var recents = ""  // chemins des derniers projets, un par ligne
+    @AppStorage("appearance") private var appearance = "system"
+
+    var body: some View {
+        Group {
+            if let project {
+                ProjectView(project: project) { self.project = nil }
+                    .id(project.root)
             } else {
-                log = texError(r.out)
+                WelcomeView(recents: recentURLs, open: open)
             }
+        }
+        .onChange(of: appearance, initial: true) {
+            // NSApp.appearance : l'éditeur et le PDF (AppKit) suivent aussi, pas seulement SwiftUI.
+            NSApp.appearance = appearance == "light" ? NSAppearance(named: .aqua)
+                : appearance == "dark" ? NSAppearance(named: .darkAqua) : nil
         }
     }
 
-    func importPhoto() {
+    var recentURLs: [URL] {
+        recents.split(separator: "\n").map { URL(fileURLWithPath: String($0)) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Ouvre un dossier de projet, ou le dossier d'un fichier .tex choisi (ce fichier est alors ouvert).
+    func open(_ url: URL) {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return }
+        let root = isDir.boolValue ? url : url.deletingLastPathComponent()
+        recents = ([root.path] + recentURLs.map(\.path).filter { $0 != root.path }).prefix(8).joined(separator: "\n")
+        let p = Project(root: root)
+        if !isDir.boolValue, let file = relativePath(url.path, root: root) { p.open(file) }
+        project = p
+    }
+}
+
+struct WelcomeView: View {
+    let recents: [URL]
+    let open: (URL) -> Void
+    @State private var message: String?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 14) {
+                Image(systemName: "function")
+                    .font(.system(size: 52, weight: .light))
+                    .foregroundStyle(.tint)
+                    .frame(width: 96, height: 96)
+                    .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                Text("notes2latex").font(.largeTitle.weight(.semibold))
+                Text("Vos projets LaTeX, compilés sur ce Mac.").foregroundStyle(.secondary)
+                VStack(spacing: 10) {
+                    Button(action: newProject) {
+                        Label("Nouveau projet", systemImage: "plus").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    Button(action: openPanel) {
+                        Label("Ouvrir un dossier ou un .tex…", systemImage: "folder").frame(maxWidth: .infinity)
+                    }
+                    .keyboardShortcut("o")
+                }
+                .controlSize(.large)
+                .frame(width: 260)
+                .padding(.top, 10)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider()
+
+            List {
+                Section("Récents") {
+                    if recents.isEmpty {
+                        Text("Aucun projet pour l'instant").foregroundStyle(.secondary)
+                    }
+                    ForEach(recents, id: \.self) { url in
+                        Button { open(url) } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(url.lastPathComponent).fontWeight(.medium)
+                                    Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                                }
+                            } icon: { Image(systemName: "folder.fill").foregroundStyle(.tint) }
+                            .padding(.vertical, 3)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .frame(width: 320)
+        }
+        .frame(minWidth: 760, minHeight: 480)
+        .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") {} }
+    }
+
+    func newProject() {
+        let panel = NSSavePanel()
+        panel.title = "Nouveau projet"
+        panel.prompt = "Créer"
+        panel.nameFieldLabel = "Nom du projet :"
+        panel.nameFieldStringValue = "Sans titre"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let error = createProject(at: url) { message = error } else { open(url) }
+    }
+
+    func openPanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image, UTType(filenameExtension: "inkml") ?? .xml]
-        guard panel.runModal() == .OK, let file = panel.url else { return }
-        busy = true
-        Task {
-            defer { busy = false }
-            let python = repo.appendingPathComponent(".venv/bin/python").path
-            let r = await run(python, ["predict.py", file.path], in: repo)
-            guard r.status == 0, let latex = prediction(r.out, file: file.lastPathComponent) else {
-                log = "Lecture impossible :\n" + r.out
-                return
-            }
-            source = insertFormula(latex, into: source)
-            compile()
-        }
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.folder, UTType(filenameExtension: "tex") ?? .plainText]
+        panel.message = "Choisir le dossier d'un projet, ou un fichier .tex"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        open(url)
     }
-}
-
-struct PDFKitView: NSViewRepresentable {
-    let document: PDFDocument?
-    func makeNSView(context: Context) -> PDFView {
-        let v = PDFView()
-        v.autoScales = true
-        return v
-    }
-    func updateNSView(_ v: PDFView, context: Context) { if v.document !== document { v.document = document } }
-}
-
-// Les apps lancées depuis le Finder n'ont pas le PATH du terminal : on cherche aux emplacements habituels.
-func findTool(_ name: String) -> String? {
-    ["/opt/homebrew/bin", "/Library/TeX/texbin", "/usr/local/bin"]
-        .map { "\($0)/\(name)" }
-        .first { FileManager.default.isExecutableFile(atPath: $0) }
-}
-
-func run(_ exe: String, _ args: [String], in dir: URL) async -> (status: Int32, out: String) {
-    await Task.detached {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: exe)
-        p.arguments = args
-        p.currentDirectoryURL = dir
-        p.standardInput = FileHandle.nullDevice  // pdflatex ne reste jamais bloqué sur une question
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = pipe
-        do { try p.run() } catch { return (-1, error.localizedDescription) }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return (p.terminationStatus, String(decoding: data, as: UTF8.self))
-    }.value
-}
-
-/// Garde l'erreur de pdflatex (la ligne « ! … » et la ligne fautive), sinon la fin du journal.
-func texError(_ out: String) -> String {
-    let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
-    let err = lines.drop { !$0.hasPrefix("!") }.prefix(8)
-    return (err.isEmpty ? lines.suffix(15) : err).joined(separator: "\n")
-}
-
-/// predict.py écrit « nom_du_fichier: formule ».
-func prediction(_ out: String, file: String) -> String? {
-    out.split(separator: "\n").last { $0.hasPrefix(file + ": ") }.map { String($0.dropFirst(file.count + 2)) }
-}
-
-/// Ajoute la formule en mode display juste avant \end{document}.
-func insertFormula(_ latex: String, into source: String) -> String {
-    let block = "\\[\n\(latex)\n\\]\n"
-    guard let end = source.range(of: "\\end{document}", options: .backwards) else { return source + "\n" + block }
-    return source.replacingCharacters(in: end.lowerBound..<end.lowerBound, with: block)
 }
