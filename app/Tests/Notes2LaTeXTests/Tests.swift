@@ -1,4 +1,5 @@
 import ImageIO
+import PDFKit
 import XCTest
 @testable import Notes2LaTeX
 
@@ -65,6 +66,35 @@ final class Tests: XCTestCase {
         XCTAssertEqual(parseLog(log, root: URL(fileURLWithPath: "/p")), [LogItem(
             kind: .error, file: "main.tex", line: 3,
             message: "Fichier « academy.sty » introuvable : ajoutez-le au projet (+ › Importer des fichiers) ou installez le paquet qui le fournit.")])
+    }
+
+    /// PDF sombre : fond presque noir, encre claire, et un aplat bleu qui reste bleu.
+    func testInvertedPDF() throws {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let ctx = try XCTUnwrap(CGContext(consumer: CGDataConsumer(data: data as CFMutableData)!, mediaBox: &box, nil))
+        ctx.beginPage(mediaBox: &box)  // pas de fond peint, comme un PDF de LaTeX
+        ctx.setFillColor(.black); ctx.fill(CGRect(x: 10, y: 10, width: 30, height: 30))
+        ctx.setFillColor(CGColor(red: 0.04, green: 0.52, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 60, y: 60, width: 30, height: 30))
+        ctx.endPage(); ctx.closePDF()
+
+        let page = try XCTUnwrap(PDFDocument(data: try XCTUnwrap(invertedPDF(data as Data)))?.page(at: 0))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 100, pixelsHigh: 100, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        NSGraphicsContext.saveGraphicsState()
+        let g = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.current = g
+        g.cgContext.setFillColor(.white); g.cgContext.fill(box)  // comme un lecteur : papier blanc sous la page
+        page.draw(with: .mediaBox, to: g.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
+        func rgb(_ x: Int, _ y: Int) -> (r: CGFloat, g: CGFloat, b: CGFloat) {  // y depuis le haut
+            let c = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+            return (c.redComponent, c.greenComponent, c.blueComponent)
+        }
+        XCTAssertLessThan(rgb(50, 50).r, 0.2, "le fond doit être sombre")
+        XCTAssertGreaterThan(rgb(25, 75).r, 0.8, "l'encre noire doit devenir claire")
+        let blue = rgb(75, 25)
+        XCTAssertGreaterThan(blue.b, blue.r + 0.2, "le bleu doit rester bleu")
     }
 
     func testEngineFlag() {

@@ -12,6 +12,7 @@ struct ProjectView: View {
     @State private var message: String?
     @State private var showHistory = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("invertPDF") private var invertPDF = false  // PDF en sombre : aperçu et export
 
     var body: some View {
         NavigationSplitView {
@@ -124,7 +125,7 @@ struct ProjectView: View {
     var previewPane: some View {
         VStack(spacing: 0) {
             if let pdf = project.pdf {
-                PDFKitView(document: pdf, project: project)
+                PDFKitView(document: pdf, project: project, inverted: invertPDF)
             } else {
                 ContentUnavailableView(
                     project.compiling ? "Compilation…" : "Pas encore de PDF",
@@ -170,9 +171,12 @@ struct ProjectView: View {
             }
             .help("Erreurs et avertissements de la compilation — ⇧⌘L")
             .keyboardShortcut("l", modifiers: [.command, .shift])
+            Toggle(isOn: $invertPDF) { Label("Inverser les couleurs", systemImage: "circle.lefthalf.filled") }
+                .help("PDF en sombre : fond noir, texte clair, couleurs gardées. L'export suit ce réglage.")
+                .keyboardShortcut("i", modifiers: [.command, .option])
             Button(action: exportPDF) { Label("Exporter en PDF", systemImage: "square.and.arrow.up") }
                 .labelStyle(.titleAndIcon)
-                .help("Enregistrer le PDF où vous voulez — ⌘E, aussi dans le menu Fichier")
+                .help(invertPDF ? "Enregistrer le PDF en sombre (couleurs inversées) — ⌘E" : "Enregistrer le PDF où vous voulez — ⌘E, aussi dans le menu Fichier")
                 .disabled(project.pdfData == nil)
         }
     }
@@ -194,11 +198,15 @@ struct ProjectView: View {
     }
 
     func exportPDF() {
-        guard let data = project.pdfData else { return }
+        guard let original = project.pdfData else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = project.name + ".pdf"
+        panel.nameFieldStringValue = project.name + (invertPDF ? " (sombre).pdf" : ".pdf")
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = invertPDF ? invertedPDF(original) : original else {
+            message = "Export impossible : le PDF n'a pas pu être inversé."
+            return
+        }
         do { try data.write(to: url) } catch { message = "Export impossible : \(error.localizedDescription)" }
     }
 }
@@ -313,16 +321,21 @@ struct LogPanel: View {
 struct PDFKitView: NSViewRepresentable {
     let document: PDFDocument
     let project: Project
+    let inverted: Bool
 
     func makeNSView(context: Context) -> FittingPDFView {
         let v = FittingPDFView()
-        v.backgroundColor = .underPageBackgroundColor
+        v.wantsLayer = true
+        v.layerUsesCoreImageFilters = true
         v.onDoubleClick = { [weak project] page, point in project?.showInSource(page: page, at: point) }
         project.pdfView = v
         return v
     }
 
     func updateNSView(_ v: FittingPDFView, context: Context) {
+        v.contentFilters = inverted ? invertFilters() : []
+        // Le filtre inverse aussi le fond : un gris clair ici donne le gris sombre habituel autour des pages.
+        v.backgroundColor = inverted ? NSColor(white: 0.94, alpha: 1) : .underPageBackgroundColor
         guard v.document !== document else { return }
         let old = v.document
         let dest = v.currentDestination
@@ -333,6 +346,60 @@ struct PDFKitView: NSViewRepresentable {
               let page = document.page(at: min(old.index(for: oldPage), document.pageCount - 1)) else { return }
         v.go(to: PDFDestination(page: page, at: dest.point))
     }
+}
+
+// MARK: - Couleurs inversées
+
+/// Clarté inversée, teintes gardées (un encadré bleu reste bleu) : y = 1 − 0,89·x donne un fond #1C1C1C
+/// plutôt qu'un noir pur, et un texte blanc ; la rotation de teinte de 180° annule celle de l'inversion.
+let invertBlackLevel = 0.89
+
+func invertFilters() -> [CIFilter] {
+    let k = CGFloat(invertBlackLevel)
+    let matrix = CIFilter(name: "CIColorMatrix", parameters: [
+        "inputRVector": CIVector(x: -k, y: 0, z: 0, w: 0),
+        "inputGVector": CIVector(x: 0, y: -k, z: 0, w: 0),
+        "inputBVector": CIVector(x: 0, y: 0, z: -k, w: 0),
+        "inputBiasVector": CIVector(x: 1, y: 1, z: 1, w: 0),
+    ])
+    let hue = CIFilter(name: "CIHueAdjust", parameters: ["inputAngle": Double.pi])
+    // Core Image calcule en lumière linéaire : sans ce passage par sRGB, le fond sortait gris moyen
+    // au lieu de #1C1C1C, et l'aperçu ne ressemblait plus à l'export.
+    return [CIFilter(name: "CILinearToSRGBToneCurve"), matrix, CIFilter(name: "CISRGBToneCurveToLinear"), hue].compactMap { $0 }
+}
+
+/// Le même PDF en sombre, toujours vectoriel (texte net et sélectionnable) :
+/// page dessinée, puis inversée par un fond blanc en mode « différence », éclaircie au même niveau que
+/// l'aperçu, et enfin recolorée par une image de la page d'origine en mode « teinte ».
+func invertedPDF(_ data: Data) -> Data? {
+    guard let source = PDFDocument(data: data) else { return nil }
+    let out = NSMutableData()
+    guard let consumer = CGDataConsumer(data: out as CFMutableData),
+          let ctx = CGContext(consumer: consumer, mediaBox: nil, nil) else { return nil }
+    for i in 0..<source.pageCount {
+        guard let page = source.page(at: i) else { continue }
+        var box = page.bounds(for: .mediaBox)
+        ctx.beginPage(mediaBox: &box)
+        ctx.setFillColor(.white)  // le papier blanc : un PDF de LaTeX ne le peint pas, c'est le lecteur qui l'ajoute
+        ctx.fill(box)
+        page.draw(with: .mediaBox, to: ctx)
+        ctx.setBlendMode(.difference)
+        ctx.setFillColor(.white)
+        ctx.fill(box)
+        ctx.setBlendMode(.normal)
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1 - invertBlackLevel))
+        ctx.fill(box)
+        // shortcut: les teintes viennent d'une image de la page à 1,5×, assez pour des aplats de couleur ;
+        // un dégradé très fin pourrait baver un peu.
+        if let colors = page.thumbnail(of: NSSize(width: box.width * 1.5, height: box.height * 1.5), for: .mediaBox)
+            .cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            ctx.setBlendMode(.hue)
+            ctx.draw(colors, in: box)
+        }
+        ctx.endPage()
+    }
+    ctx.closePDF()
+    return out as Data
 }
 
 /// Pages à la largeur de la vue (2,5× au plus) ; un double-clic renvoie la page et le point touchés.
