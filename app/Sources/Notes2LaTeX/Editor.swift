@@ -44,6 +44,7 @@ import SwiftUI
 struct LaTeXEditor: NSViewRepresentable {
     @Binding var text: String
     let controller: EditorController
+    @AppStorage("editorFontSize") private var fontSize = defaultEditorFontSize  // ⌘+ / ⌘− / ⌘0
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text, controller: controller) }
 
@@ -73,7 +74,7 @@ struct LaTeXEditor: NSViewRepresentable {
         tv.isContinuousSpellCheckingEnabled = false
         tv.isAutomaticTextCompletionEnabled = false
         tv.textContainerInset = NSSize(width: 18, height: 18)
-        tv.typingAttributes = baseAttributes
+        tv.typingAttributes = baseAttributes()
         tv.string = text
         highlight(tv.textStorage!)
         controller.textView = tv
@@ -90,6 +91,11 @@ struct LaTeXEditor: NSViewRepresentable {
             tv.string = text
             highlight(tv.textStorage!)
             tv.undoManager?.removeAllActions()  // autre fichier, ou modifié ailleurs : l'historique ne s'applique plus
+        }
+        if (tv.typingAttributes[.font] as? NSFont).map({ Double($0.pointSize) }) != fontSize {  // taille du texte changée dans le menu
+            tv.typingAttributes = baseAttributes()
+            highlight(tv.textStorage!)
+            scroll.verticalRulerView?.needsDisplay = true
         }
         if let line = controller.pendingLine {
             controller.pendingLine = nil
@@ -140,33 +146,46 @@ struct LaTeXEditor: NSViewRepresentable {
     }
 }
 
-let baseAttributes: [NSAttributedString.Key: Any] = {
+let defaultEditorFontSize = 13.5
+let editorFontSizes = 10.0...24.0
+
+func editorFontSize() -> Double {
+    let size = UserDefaults.standard.double(forKey: "editorFontSize")
+    return size > 0 ? min(max(size, editorFontSizes.lowerBound), editorFontSizes.upperBound) : defaultEditorFontSize
+}
+
+func baseAttributes() -> [NSAttributedString.Key: Any] {
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineHeightMultiple = 1.25
     return [
-        .font: NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular),
+        .font: NSFont.monospacedSystemFont(ofSize: editorFontSize(), weight: .regular),
         .foregroundColor: NSColor.textColor,
         .paragraphStyle: paragraph,
     ]
-}()
+}
 
-// Couleurs système : elles s'adaptent seules au mode clair et au mode sombre.
-// Dans l'ordre : une règle plus bas l'emporte sur celles du dessus.
-let syntax: [(NSRegularExpression, NSColor)] = [
-    (try! NSRegularExpression(pattern: #"[{}\[\]]"#), .tertiaryLabelColor),
-    (try! NSRegularExpression(pattern: #"\\[A-Za-z@]+\*?|\\."#), .systemBlue),
-    (try! NSRegularExpression(pattern: #"\\(?:begin|end)\{[^}]*\}"#), .systemPurple),
-    (try! NSRegularExpression(pattern: #"\$\$?|\\\[|\\\]|\\\(|\\\)"#), .systemOrange),
-    (try! NSRegularExpression(pattern: #"(?<!\\)%.*$"#, options: .anchorsMatchLines), .secondaryLabelColor),
+// Couleurs système : elles s'adaptent seules au mode clair et au mode sombre, avec un contraste suffisant
+// (pas de tertiaryLabelColor, trop pâle pour du texte). Les commentaires sont aussi en italique :
+// la couleur seule ne suffit pas à les distinguer. Une règle plus bas l'emporte sur celles du dessus.
+let syntax: [(regex: NSRegularExpression, color: NSColor, italic: Bool)] = [
+    (try! NSRegularExpression(pattern: #"[{}\[\]]"#), .secondaryLabelColor, false),
+    (try! NSRegularExpression(pattern: #"\\[A-Za-z@]+\*?|\\."#), .systemBlue, false),
+    (try! NSRegularExpression(pattern: #"\\(?:begin|end)\{[^}]*\}"#), .systemPurple, false),
+    (try! NSRegularExpression(pattern: #"\$\$?|\\\[|\\\]|\\\(|\\\)"#), .systemOrange, false),
+    (try! NSRegularExpression(pattern: #"(?<!\\)%.*$"#, options: .anchorsMatchLines), .secondaryLabelColor, true),
 ]
 
 func highlight(_ storage: NSTextStorage) {
     let all = NSRange(location: 0, length: storage.length)
+    let base = baseAttributes()
+    let italic = NSFontManager.shared.convert(base[.font] as! NSFont, toHaveTrait: .italicFontMask)
     storage.beginEditing()
-    storage.setAttributes(baseAttributes, range: all)
-    for (regex, color) in syntax {
-        regex.enumerateMatches(in: storage.string, range: all) { match, _, _ in
-            if let r = match?.range { storage.addAttribute(.foregroundColor, value: color, range: r) }
+    storage.setAttributes(base, range: all)
+    for rule in syntax {
+        rule.regex.enumerateMatches(in: storage.string, range: all) { match, _, _ in
+            guard let r = match?.range else { return }
+            storage.addAttribute(.foregroundColor, value: rule.color, range: r)
+            if rule.italic { storage.addAttribute(.font, value: italic, range: r) }
         }
     }
     storage.endEditing()
@@ -219,10 +238,10 @@ final class LineNumberRuler: NSRulerView {
         let cursor = tv.selectedRange().location
         var line = ns.substring(to: visible.location).filter { $0 == "\n" }.count + 1
         var index = visible.location
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: max(10, editorFontSize() * 0.8), weight: .regular)
 
         func label(_ n: Int, at y: CGFloat, current: Bool) {
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: current ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor]
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: current ? NSColor.labelColor : NSColor.secondaryLabelColor]
             let s = "\(n)" as NSString
             let size = s.size(withAttributes: attrs)
             let top = convert(NSPoint(x: 0, y: y + tv.textContainerInset.height), from: tv).y

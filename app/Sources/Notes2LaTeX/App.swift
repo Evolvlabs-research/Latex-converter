@@ -20,6 +20,8 @@ struct Notes2LaTeXApp: App {
                         Text("Clair").tag("light")
                         Text("Sombre").tag("dark")
                     }
+                    Divider()
+                    TextSizeCommands()
                 }
             }
     }
@@ -58,6 +60,22 @@ struct FindCommands: View {
         let sender = NSMenuItem()
         sender.tag = action.rawValue
         NSApp.sendAction(#selector(NSTextView.performFindPanelAction(_:)), to: nil, from: sender)
+    }
+}
+
+/// Taille du texte de l'éditeur, comme dans les autres éditeurs du Mac.
+struct TextSizeCommands: View {
+    @AppStorage("editorFontSize") private var size = defaultEditorFontSize
+    var body: some View {
+        Button("Agrandir le texte") { size = min(size + 1, editorFontSizes.upperBound) }
+            .keyboardShortcut("+")
+            .disabled(size >= editorFontSizes.upperBound)
+        Button("Réduire le texte") { size = max(size - 1, editorFontSizes.lowerBound) }
+            .keyboardShortcut("-")
+            .disabled(size <= editorFontSizes.lowerBound)
+        Button("Taille du texte par défaut") { size = defaultEditorFontSize }
+            .keyboardShortcut("0")
+            .disabled(size == defaultEditorFontSize)
     }
 }
 
@@ -103,6 +121,7 @@ struct WelcomeView: View {
     let recents: [URL]
     let open: (URL) -> Void
     @State private var message: String?
+    @AppStorage("recents") private var storedRecents = ""
 
     var body: some View {
         HStack(spacing: 0) {
@@ -116,17 +135,7 @@ struct WelcomeView: View {
                 Text("Nouveau projet").font(.headline).padding(.top, 18)
                 HStack(spacing: 12) {
                     ForEach(projectTemplates) { template in
-                        Button { newProject(template) } label: {
-                            VStack(spacing: 8) {
-                                Image(systemName: template.icon).font(.system(size: 24, weight: .light)).frame(height: 30)
-                                Text(template.name).font(.callout)
-                            }
-                            .frame(width: 104, height: 88)
-                            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Nouveau projet à partir du modèle « \(template.name) »")
+                        TemplateCard(template: template) { newProject(template) }
                     }
                 }
                 Button(action: openPanel) {
@@ -158,13 +167,19 @@ struct WelcomeView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Afficher dans le Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                            Button("Retirer de la liste") {  // le dossier lui-même n'est pas touché
+                                storedRecents = storedRecents.split(separator: "\n").filter { $0 != url.path }.joined(separator: "\n")
+                            }
+                        }
                     }
                 }
             }
             .listStyle(.sidebar)
             .frame(width: 320)
         }
-        .frame(minWidth: 960, minHeight: 520)
+        .frame(minWidth: 1020, minHeight: 540)
         .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") {} }
     }
 
@@ -187,5 +202,43 @@ struct WelcomeView: View {
         panel.message = "Choisir le dossier d'un projet, ou un fichier .tex"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         open(url)
+    }
+}
+
+/// Carte d'un modèle de projet : icône, nom, usage ; surlignée au survol.
+struct TemplateCard: View {
+    let template: ProjectTemplate
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: template.icon)
+                    .font(.title)
+                    .fontWeight(.light)
+                    .foregroundStyle(hovering ? Color.accentColor : .primary)
+                    .frame(height: 32)
+                Text(template.name).font(.callout.weight(.medium))
+                Text(template.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2, reservesSpace: true)
+            }
+            .padding(.horizontal, 8)
+            .frame(width: 124, height: 118)
+            .background(hovering ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.04),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(hovering ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08)))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .help("Nouveau projet à partir du modèle « \(template.name) »")
+        .accessibilityLabel("Nouveau projet : \(template.name)")
+        .accessibilityHint(template.detail)
     }
 }

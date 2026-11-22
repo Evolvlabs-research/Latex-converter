@@ -11,6 +11,7 @@ struct ProjectView: View {
     @State private var newFileName = ""
     @State private var message: String?
     @State private var showHistory = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationSplitView {
@@ -133,12 +134,12 @@ struct ProjectView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if showLog {
-                LogPanel(project: project) { withAnimation(.snappy) { showLog = false } }
+                LogPanel(project: project) { withAnimation(reduceMotion ? nil : .snappy) { showLog = false } }
                     .transition(.move(edge: .bottom))
             } else if let first = project.log.first(where: { $0.kind == .error }) {
                 ErrorBar(item: first, count: project.errors,
                          reveal: { project.reveal(file: first.file, line: first.line) },
-                         showLog: { withAnimation(.snappy) { showLog = true } })
+                         showLog: { withAnimation(reduceMotion ? nil : .snappy) { showLog = true } })
             }
         }
         .background(Color(nsColor: .underPageBackgroundColor))
@@ -164,7 +165,7 @@ struct ProjectView: View {
             Button(action: project.compile) { Label("Compiler", systemImage: "arrow.clockwise") }
                 .help("Recompiler — ⌘R. Le PDF se met aussi à jour quand on arrête de taper.")
                 .keyboardShortcut("r")
-            Button { withAnimation(.snappy) { showLog.toggle() } } label: {
+            Button { withAnimation(reduceMotion ? nil : .snappy) { showLog.toggle() } } label: {
                 Label("Journal", systemImage: project.errors > 0 ? "exclamationmark.triangle" : "list.bullet.rectangle")
             }
             .help("Erreurs et avertissements de la compilation — ⇧⌘L")

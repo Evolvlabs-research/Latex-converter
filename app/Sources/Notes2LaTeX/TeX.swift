@@ -281,12 +281,13 @@ struct ProjectTemplate: Identifiable {
     let id: String
     let name: String
     let icon: String
+    let detail: String  // à quoi il sert, en une ligne sous le nom
     let main: String
 }
 
 let projectTemplates = [
-    ProjectTemplate(id: "article", name: "Article", icon: "doc.text", main: newProjectTemplate),
-    ProjectTemplate(id: "rapport", name: "Rapport", icon: "book.closed", main: """
+    ProjectTemplate(id: "article", name: "Article", icon: "doc.text", detail: "Notes, devoirs, articles", main: newProjectTemplate),
+    ProjectTemplate(id: "rapport", name: "Rapport", icon: "book.closed", detail: "Chapitres et sommaire", main: """
     \\documentclass[11pt]{report}
     \\usepackage[T1]{fontenc}
     \\usepackage[french]{babel}
@@ -312,7 +313,7 @@ let projectTemplates = [
     \\end{document}
 
     """),
-    ProjectTemplate(id: "presentation", name: "Présentation", icon: "rectangle.on.rectangle", main: """
+    ProjectTemplate(id: "presentation", name: "Présentation", icon: "rectangle.on.rectangle", detail: "Diapositives Beamer", main: """
     \\documentclass{beamer}
     \\usepackage[T1]{fontenc}
     \\usepackage[french]{babel}
@@ -338,7 +339,7 @@ let projectTemplates = [
     \\end{document}
 
     """),
-    ProjectTemplate(id: "exercices", name: "Exercices", icon: "list.number", main: """
+    ProjectTemplate(id: "exercices", name: "Exercices", icon: "list.number", detail: "Feuille de TD numérotée", main: """
     \\documentclass[11pt]{article}
     \\usepackage[T1]{fontenc}
     \\usepackage[french]{babel}
@@ -366,7 +367,7 @@ let projectTemplates = [
     \\end{document}
 
     """),
-    ProjectTemplate(id: "formule", name: "Formule seule", icon: "function", main: """
+    ProjectTemplate(id: "formule", name: "Formule seule", icon: "function", detail: "Une équation à exporter", main: """
     \\documentclass[border=8pt]{standalone}
     \\usepackage{amsmath,amssymb}
 
