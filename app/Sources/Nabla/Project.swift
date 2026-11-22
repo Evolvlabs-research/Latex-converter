@@ -54,7 +54,7 @@ func modificationDate(_ url: URL) -> Date? {
     var mainKey: String { "main:" + root.path }
     var outDir: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("notes2latex/" + root.path.replacingOccurrences(of: "/", with: "_"))
+            .appendingPathComponent("Nabla/" + root.path.replacingOccurrences(of: "/", with: "_"))
     }
     func output(_ suffix: String) -> URL? {
         main.map { outDir.appendingPathComponent((($0 as NSString).lastPathComponent as NSString).deletingPathExtension + suffix) }

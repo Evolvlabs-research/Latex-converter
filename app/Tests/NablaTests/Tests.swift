@@ -1,6 +1,6 @@
 import PDFKit
 import XCTest
-@testable import Notes2LaTeX
+@testable import Nabla
 
 final class Tests: XCTestCase {
     func testParseLog() {

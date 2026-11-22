@@ -8,6 +8,16 @@ func findTool(_ name: String) -> String? {
     texDirs.map { "\($0)/\(name)" }.first { FileManager.default.isExecutableFile(atPath: $0) }
 }
 
+/// Ce qui manque pour compiler : rien, seulement latexmk (BasicTeX l'omet), ou LaTeX tout entier.
+enum TeXSetup { case ready, missingLatexmk, missingTeX }
+
+func texSetup() -> TeXSetup {
+    if findTool("latexmk") != nil { return .ready }
+    return findTool("pdflatex") != nil ? .missingLatexmk : .missingTeX
+}
+
+let mactexURL = URL(string: "https://www.tug.org/mactex/")!
+
 /// Lance un programme, rend son code de sortie et sa sortie. Arrêté au bout de `timeout` secondes.
 func run(_ exe: String, _ args: [String], in dir: URL, timeout: TimeInterval = 120) async -> (status: Int32, out: String) {
     await Task.detached {
@@ -54,7 +64,10 @@ struct Build {
 /// Compile `main` (chemin relatif) depuis la racine du projet ; les fichiers produits vont dans `outDir`.
 func latexmk(root: URL, main: String, outDir: URL) async -> Build {
     guard let tool = findTool("latexmk") else {
-        return Build(pdf: nil, log: [LogItem(kind: .error, message: "latexmk introuvable. Installer : brew install --cask mactex-no-gui")])
+        let message = texSetup() == .missingLatexmk
+            ? "latexmk manque à votre installation de LaTeX. Dans le Terminal : sudo tlmgr install latexmk"
+            : "LaTeX n'est pas installé sur ce Mac. Installez MacTeX (tug.org/mactex), puis recompilez."
+        return Build(pdf: nil, log: [LogItem(kind: .error, message: message)])
     }
     try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
     let name = ((main as NSString).lastPathComponent as NSString).deletingPathExtension

@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Notes2LaTeX
+@testable import Nabla
 
 /// Notations rares ou compliquées (dossier Stress) passées par chaque partie de Nabla qui lit du LaTeX.
 final class StressTests: XCTestCase {

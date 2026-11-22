@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @main
-struct Notes2LaTeXApp: App {
+struct NablaApp: App {
     @AppStorage("appearance") private var appearance = "system"
 
     init() { NSApplication.shared.setActivationPolicy(.regular) }  // fenêtre au premier plan aussi avec `swift run`
@@ -122,6 +122,7 @@ struct WelcomeView: View {
     let open: (URL) -> Void
     @State private var message: String?
     @AppStorage("recents") private var storedRecents = ""
+    @State private var setup = texSetup()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -132,6 +133,9 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
                 Text("Nabla").font(.largeTitle.weight(.semibold))
                 Text("Vos projets LaTeX, compilés sur ce Mac.").foregroundStyle(.secondary)
+                if setup != .ready {
+                    TeXSetupCard(setup: setup) { setup = texSetup() }.padding(.top, 8)
+                }
                 Text("Nouveau projet").font(.headline).padding(.top, 18)
                 HStack(spacing: 12) {
                     ForEach(projectTemplates) { template in
@@ -180,6 +184,8 @@ struct WelcomeView: View {
             .frame(width: 320)
         }
         .frame(minWidth: 1020, minHeight: 540)
+        // Au retour dans l'app, par exemple après avoir installé MacTeX.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in setup = texSetup() }
         .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") {} }
     }
 
@@ -240,5 +246,42 @@ struct TemplateCard: View {
         .help("Nouveau projet à partir du modèle « \(template.name) »")
         .accessibilityLabel("Nouveau projet : \(template.name)")
         .accessibilityHint(template.detail)
+    }
+}
+
+/// Premier lancement sans LaTeX : quoi installer, et où.
+struct TeXSetupCard: View {
+    let setup: TeXSetup
+    let recheck: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(setup == .missingTeX ? "LaTeX n'est pas installé sur ce Mac" : "Il manque latexmk à votre LaTeX",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .symbolRenderingMode(.multicolor)
+            if setup == .missingTeX {
+                Text("Nabla compile avec la distribution LaTeX de votre Mac. Installez MacTeX (gratuit, environ 6 Go), puis revenez ici.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Votre installation (BasicTeX, par exemple) n'inclut pas latexmk. Dans le Terminal :")
+                Text("sudo tlmgr install latexmk")
+                    .font(.body.monospaced())
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            }
+            HStack {
+                if setup == .missingTeX {
+                    Button("Télécharger MacTeX") { NSWorkspace.shared.open(mactexURL) }
+                        .buttonStyle(.borderedProminent)
+                }
+                Button("Vérifier de nouveau", action: recheck)
+            }
+        }
+        .padding(16)
+        .frame(width: 560, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.orange.opacity(0.35)))
     }
 }

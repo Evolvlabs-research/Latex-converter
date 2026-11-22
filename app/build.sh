@@ -1,23 +1,30 @@
 #!/bin/sh
 # Construit app/Nabla.app : ./app/build.sh && open app/Nabla.app
-# Signature et notarisation, facultatives (voir README.md) :
+# Signature et notarisation, facultatives (voir README.md à la racine du dépôt) :
 #   NABLA_SIGN_IDENTITY="Developer ID Application: Nom (EQUIPE)" NABLA_NOTARY_PROFILE=nabla ./app/build.sh
 set -e
 cd "$(dirname "$0")"
-swift build -c release
+VERSION=1.0
+BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)  # numéro de build : nombre de commits, toujours croissant
+# Programme universel : Mac à puce Apple et Mac Intel.
+swift build -c release --arch arm64 --arch x86_64
+BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
 APP=Nabla.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-cp .build/release/Notes2LaTeX "$APP/Contents/MacOS/"
+cp "$BIN/Nabla" "$APP/Contents/MacOS/"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleDevelopmentRegion</key><string>fr</string>
   <key>CFBundleLocalizations</key><array><string>fr</string></array>
-  <key>CFBundleExecutable</key><string>Notes2LaTeX</string>
-  <key>CFBundleIdentifier</key><string>local.notes2latex</string>
+  <key>CFBundleExecutable</key><string>Nabla</string>
+  <key>CFBundleIdentifier</key><string>org.evolvlabs.nabla</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Wassim Ghnaya. Licence MIT.</string>
   <key>CFBundleName</key><string>Nabla</string>
   <key>CFBundleDisplayName</key><string>Nabla</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>

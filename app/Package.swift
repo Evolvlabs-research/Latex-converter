@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Notes2LaTeX",
+    name: "Nabla",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "Notes2LaTeX"),
+        .executableTarget(name: "Nabla"),
         // Projet de stress lu par son chemin dans les tests, pas une ressource.
-        .testTarget(name: "Notes2LaTeXTests", dependencies: ["Notes2LaTeX"], exclude: ["Stress"]),
+        .testTarget(name: "NablaTests", dependencies: ["Nabla"], exclude: ["Stress"]),
     ]
 )
