@@ -1,6 +1,6 @@
 #!/bin/sh
 # Construit app/Nabla.app : ./app/build.sh && open app/Nabla.app
-# Signature et notarisation, facultatives (voir README.md à la racine du dépôt) :
+# Sans compte Apple : signature ad hoc. Avec un compte, signature et notarisation (voir README.md) :
 #   NABLA_SIGN_IDENTITY="Developer ID Application: Nom (EQUIPE)" NABLA_NOTARY_PROFILE=nabla ./app/build.sh
 set -e
 cd "$(dirname "$0")"
@@ -41,11 +41,14 @@ if [ -n "$NABLA_SIGN_IDENTITY" ]; then
     ditto -c -k --keepParent "$APP" Nabla.zip
     xcrun notarytool submit Nabla.zip --keychain-profile "$NABLA_NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"
-    rm Nabla.zip
-    ditto -c -k --keepParent "$APP" Nabla.zip  # à partager : ticket de notarisation agrafé à l'app
-    echo "À partager : $(pwd)/Nabla.zip"
   fi
 else
-  echo "Non signée (NABLA_SIGN_IDENTITY absente) : s'ouvre sur ce Mac, pas ailleurs sans clic droit > Ouvrir."
+  # Sans compte Apple Developer : signature « ad hoc », sans certificat. Sans elle, macOS déclare l'app téléchargée
+  # « endommagée » ; avec, il affiche « développeur non identifié », qu'on lève une fois dans les Réglages.
+  codesign --force --sign - "$APP"
 fi
+codesign --verify --strict "$APP"
+rm -f Nabla.zip
+ditto -c -k --keepParent "$APP" Nabla.zip  # à publier ; une app notarisée y porte son ticket agrafé
 echo "OK : $(pwd)/$APP"
+echo "À publier : $(pwd)/Nabla.zip"

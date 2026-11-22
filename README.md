@@ -14,6 +14,22 @@
 - **Plan du document**, **historique des versions** de chaque fichier, enregistrement à chaque frappe.
 - **PDF en sombre** (couleurs inversées, à l'écran et à l'export), mode clair ou sombre.
 
+## Installer
+
+1. Télécharger `Nabla.zip` depuis la page des versions (Releases), l'ouvrir, et glisser **Nabla** dans **Applications**.
+2. Au premier lancement, macOS refuse d'ouvrir l'app : elle n'est pas notarisée par Apple (le projet n'a pas de
+   compte Apple Developer payant). Pour l'autoriser, une seule fois :
+   ouvrir **Réglages Système › Confidentialité et sécurité**, descendre jusqu'au message sur Nabla,
+   cliquer **Ouvrir quand même**, puis confirmer.
+
+   Ou, dans le Terminal :
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Nabla.app
+   ```
+
+3. Installer LaTeX (voir ci-dessous) : au premier lancement, Nabla indique ce qui manque.
+
 ## Prérequis
 
 Nabla compile avec la distribution LaTeX du Mac : installer [MacTeX](https://www.tug.org/mactex/)
@@ -33,15 +49,18 @@ Nabla compile avec la distribution LaTeX du Mac : installer [MacTeX](https://www
 cd app && swift test
 ```
 
-## Signer et notariser pour partager l'app
+## Publier une version
 
-Sans signature, l'app s'ouvre sur le Mac qui l'a construite ; ailleurs, macOS la bloque (clic droit > Ouvrir pour passer outre).
-Pour la partager proprement, il faut un compte Apple Developer (99 $/an) :
+`./app/build.sh` laisse `app/Nabla.zip`, à joindre à une version (Release) sur GitHub. Sans compte Apple Developer,
+l'app est signée « ad hoc » (sans certificat) : macOS l'accepte après l'autorisation décrite dans « Installer ».
+Sans cette signature, un Mac à puce Apple déclarerait l'app « endommagée ».
 
-1. Dans Xcode > Réglages > Comptes, ajouter le compte, puis Gérer les certificats > + > **Developer ID Application**.
-   Vérifier qu'il est là : `security find-identity -v -p codesigning`.
-2. Créer un mot de passe pour app sur [account.apple.com](https://account.apple.com) (Connexion et sécurité),
-   puis enregistrer un profil de notarisation une fois pour toutes :
+### Avec un compte Apple Developer (facultatif, 99 $/an)
+
+L'app est alors notarisée et s'ouvre sans avertissement :
+
+1. Dans Xcode › Réglages › Comptes, ajouter le compte, puis Gérer les certificats › + › **Developer ID Application**.
+2. Créer un mot de passe pour app sur [account.apple.com](https://account.apple.com), puis une fois pour toutes :
 
    ```sh
    xcrun notarytool store-credentials nabla --apple-id ADRESSE --team-id EQUIPE --password MOT_DE_PASSE_POUR_APP
@@ -52,10 +71,6 @@ Pour la partager proprement, il faut un compte Apple Developer (99 $/an) :
    ```sh
    NABLA_SIGN_IDENTITY="Developer ID Application: Prénom Nom (EQUIPE)" NABLA_NOTARY_PROFILE=nabla ./app/build.sh
    ```
-
-   `build.sh` signe avec le runtime renforcé, envoie l'app à Apple, attend la réponse (quelques minutes),
-   agrafe le ticket et laisse `app/Nabla.zip`, à partager. Sans `NABLA_NOTARY_PROFILE`, l'app est seulement signée ;
-   sans `NABLA_SIGN_IDENTITY`, rien n'est signé.
 
 ## Licence
 
