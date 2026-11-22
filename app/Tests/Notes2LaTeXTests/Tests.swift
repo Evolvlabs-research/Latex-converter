@@ -1,17 +1,8 @@
-import ImageIO
 import PDFKit
 import XCTest
 @testable import Notes2LaTeX
 
 final class Tests: XCTestCase {
-    func testInsertionPoint() {
-        let doc = "A\n\\begin{document}\nx\n\\end{document}"  // corps : 19..21, \end en 21
-        XCTAssertEqual(insertionPoint(in: doc, cursor: 20), 19)  // dans le corps : début de la ligne
-        XCTAssertEqual(insertionPoint(in: doc, cursor: 0), 21)  // dans le préambule : avant \end
-        XCTAssertEqual(insertionPoint(in: doc, cursor: 30), 21)  // après \end
-        XCTAssertEqual(insertionPoint(in: "a\nbc", cursor: 3), 2)  // fichier inclus : ligne du curseur
-    }
-
     func testParseLog() {
         let root = URL(fileURLWithPath: "/p")
         let log = """
@@ -220,68 +211,5 @@ final class Tests: XCTestCase {
             XCTAssertEqual(build.log.filter { $0.kind == .error }, [], template.name)
             XCTAssertNotNil(build.pdf, template.name)
         }
-    }
-
-    func testRenderFormula() async {
-        let ok = await renderFormula("\\frac{1}{2}")
-        XCTAssertNotNil(ok)
-        let broken = await renderFormula("\\frac{")
-        XCTAssertNil(broken)
-    }
-
-    /// Lecteur Core ML : deux lectures avec un seul chargement du modèle, et une erreur qui ne l'arrête pas.
-    func testPredictor() async throws {
-        let inkml = repo.appendingPathComponent("data/mathwriting-2024/valid/d96a9353dc9648f2.inkml")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: inkml.path), "données MathWriting absentes")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: Predictor.modelDir.path), "modèle absent : uv run export_coreml.py")
-        let predictor = Predictor()
-        guard case .success(let first) = await predictor.read(inkml) else { return XCTFail("première lecture") }
-        XCTAssertEqual(first, "\\Delta T=\\dot{Q}R")
-        guard case .failure = await predictor.read(URL(fileURLWithPath: "/absent.png")) else { return XCTFail("aurait dû échouer") }
-        let start = ContinuousClock.now
-        guard case .success = await predictor.read(inkml) else { return XCTFail("le lecteur s'est arrêté après l'erreur") }
-        XCTAssertLessThan(start.duration(to: .now), .seconds(1.5), "le modèle devrait rester chargé")
-    }
-
-    /// Swift et Python lisent la même formule sur au moins 95 % des InkML de reference.json (export_coreml.py --reference).
-    func testSwiftMatchesPython() async throws {
-        let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        let ref = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: here.appendingPathComponent("reference.json")))
-        let valid = repo.appendingPathComponent("data/mathwriting-2024/valid")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: valid.path), "données MathWriting absentes")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: Predictor.modelDir.path), "modèle absent : uv run export_coreml.py")
-        let reader = try await FormulaReader.load(from: Predictor.modelDir)
-        var same = 0
-        let start = ContinuousClock.now
-        for (file, python) in ref.sorted(by: { $0.key < $1.key }) {
-            let swift = try reader.read(valid.appendingPathComponent(file))
-            if swift == python { same += 1 } else { print("\(file) : Swift « \(swift) », Python « \(python) »") }
-        }
-        let perRead = start.duration(to: .now) / ref.count
-        print("Swift = Python sur \(same)/\(ref.count) InkML, \(perRead.formatted(.units(allowed: [.milliseconds]))) par lecture")
-        XCTAssertGreaterThanOrEqual(Double(same), 0.95 * Double(ref.count))
-    }
-
-    /// Prétraitement d'une photo et tracé d'une InkML : mêmes images, au pixel près, que predict.py et data.py.
-    func testImagesMatchPython() throws {
-        let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        XCTAssertEqual(try loadPhoto(here.appendingPathComponent("photo.png")), try pngGray(here.appendingPathComponent("photo-python.png")))
-        let ref = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: here.appendingPathComponent("reference.json")))
-        let inkml = repo.appendingPathComponent("data/mathwriting-2024/valid").appendingPathComponent(ref.keys.min()!)
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: inkml.path), "données MathWriting absentes")
-        XCTAssertEqual(renderInk(try readInkML(inkml).strokes), try pngGray(here.appendingPathComponent("ink-python.png")))
-    }
-
-    /// PNG en niveaux de gris -> octets bruts, sans conversion de couleurs.
-    private func pngGray(_ url: URL) throws -> Gray {
-        let src = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
-        let cg = try XCTUnwrap(CGImageSourceCreateImageAtIndex(src, 0, nil))
-        let bytes = [UInt8](try XCTUnwrap(cg.dataProvider?.data) as Data)
-        return Gray(width: cg.width, height: cg.height,
-                    px: (0..<cg.height).flatMap { bytes[$0 * cg.bytesPerRow ..< $0 * cg.bytesPerRow + cg.width] })
-    }
-
-    func testDetokenize() {
-        XCTAssertEqual(detokenize(["\\alpha", "x", "\\beta", "^", "2"]), "\\alpha x\\beta^2")
     }
 }

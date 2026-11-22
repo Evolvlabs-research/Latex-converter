@@ -95,28 +95,4 @@ final class StressTests: XCTestCase {
         XCTAssertFalse(isComment("% des cas"))
         XCTAssertTrue(isComment("% ceci est un vrai commentaire"))
     }
-
-    /// Tout ce que le modèle de lecture sait écrire s'affiche dans la fenêtre de vérification.
-    func testEveryModelCommandRenders() async throws {
-        let vocab = repo.appendingPathComponent("app/Model/vocab.json")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: vocab.path), "modèle Core ML pas encore exporté")
-        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: vocab))
-        let tokens = (json as? [String]) ?? ((json as? [String: Any])?["itos"] as? [String]) ?? []
-        let usage: [String: String] = [
-            "\\frac": "\\frac{a}{b}", "\\sqrt": "\\sqrt{x}", "\\mathbb": "\\mathbb{R}", "\\not": "\\not=",
-            "\\hat": "\\hat{x}", "\\dot": "\\dot{x}", "\\tilde": "\\tilde{x}", "\\vec": "\\vec{x}",
-            "\\overline": "\\overline{x}", "\\underline": "\\underline{x}", "\\\\": "", "\\begin": "", "\\end": "",
-        ]
-        let commands = tokens.filter { $0.hasPrefix("\\") }
-        XCTAssertGreaterThan(commands.count, 100)
-        let environments = ["matrix", "pmatrix", "bmatrix", "vmatrix", "cases", "aligned"].map {
-            "\\begin{\($0)} a & b \\\\ c & d \\end{\($0)}"
-        } + ["\\begin{array}{cc} a & b \\\\ c & d \\end{array}"]
-        let body = (commands.map { usage[$0] ?? $0 } + environments).filter { !$0.isEmpty }.joined(separator: "\\;")
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("n2l-vocab-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try formulaDocument(body).write(to: dir.appendingPathComponent("f.tex"), atomically: true, encoding: .utf8)
-        let r = await Notes2LaTeX.run(try XCTUnwrap(findTool("pdflatex")), ["-interaction=nonstopmode", "-halt-on-error", "f.tex"], in: dir)
-        XCTAssertEqual(r.status, 0, parseLog(r.out, root: dir).map(\.message).joined(separator: "\n"))
-    }
 }

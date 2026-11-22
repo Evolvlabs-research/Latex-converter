@@ -25,8 +25,6 @@ func modificationDate(_ url: URL) -> Date? {
     var log: [LogItem] = []
     var duration: Duration?
     var compiling = false
-    var reading = false
-    var review: FormulaReview?  // formule lue, en attente de vérification avant insertion
     var outline: [OutlineItem] = []
 
     @ObservationIgnored let editor = EditorController()
@@ -41,7 +39,6 @@ func modificationDate(_ url: URL) -> Date? {
         main = UserDefaults.standard.string(forKey: mainKey).flatMap { files.contains($0) ? $0 : nil } ?? guessMain()
         open(main ?? files.first { textExtensions.contains(ext($0)) })
         editor.sources = { [weak self] in self?.projectSources() ?? CompletionSources() }
-        editor.onPhoto = { [weak self] in self?.readPhoto($0) }
         compile()
         Task { [weak self] in  // un autre éditeur ou Git peut modifier le fichier ouvert à tout moment
             while true {
@@ -66,7 +63,6 @@ func modificationDate(_ url: URL) -> Date? {
     var isEditingText: Bool { current.map { textExtensions.contains(ext($0)) } == true && openError == nil }
 
     var status: String {
-        if reading { return "Lecture de la photo…" }
         if let saveError { return saveError }
         if compiling { return "Compilation…" }
         if errors > 0 { return errors == 1 ? "1 erreur" : "\(errors) erreurs" }
@@ -273,32 +269,11 @@ func modificationDate(_ url: URL) -> Date? {
         }
     }
 
-    // MARK: Complétion et photo
+    // MARK: Complétion
 
     func projectSources() -> CompletionSources {
         completionSources(files.filter { ["tex", "bib"].contains(ext($0)) }.compactMap { file in
             (try? String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)).map { (file, $0) }
         })
     }
-
-    /// Lit la formule d'une photo (ou d'un tracé InkML), puis la montre pour vérification avant de l'insérer.
-    func readPhoto(_ file: URL) {
-        guard !reading, isEditingText else { return }
-        reading = true
-        Task {
-            let result = await Predictor.shared.read(file)
-            reading = false
-            switch result {
-            case .success(let latex): review = FormulaReview(photo: file, latex: latex)
-            case .failure(let error):
-                log.insert(LogItem(kind: .error, message: "Lecture impossible de « \(file.lastPathComponent) » : \(error.message)"), at: 0)
-            }
-        }
-    }
-}
-
-struct FormulaReview: Identifiable {
-    let id = UUID()
-    let photo: URL
-    let latex: String
 }

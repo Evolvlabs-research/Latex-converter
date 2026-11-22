@@ -1,6 +1,6 @@
 # Nabla
 
-Éditeur LaTeX pour Mac (macOS 14+) qui compile en local et lit les formules manuscrites.
+Éditeur LaTeX pour Mac (macOS 14+) qui compile en local.
 
 ## Construire
 
@@ -8,18 +8,7 @@
 ./app/build.sh && open app/Nabla.app
 ```
 
-Le modèle de lecture est embarqué dans l'app (`Contents/Resources/Model`, Core ML) : une fois construite,
-Nabla n'a besoin ni de Python ni du dépôt. Seule la compilation de LaTeX demande MacTeX
-(`brew install --cask mactex-no-gui`).
-
-Le modèle Core ML vient de `checkpoints/best.pt`. `build.sh` l'exporte dans `app/Model/` s'il manque ;
-après un nouvel entraînement, l'exporter de nouveau :
-
-```sh
-uv run export_coreml.py --reference 100
-```
-
-`--reference 100` régénère aussi les fichiers du test qui compare Swift et Python (`app/Tests/Notes2LaTeXTests`).
+Une fois construite, Nabla n'a besoin que de MacTeX pour compiler (`brew install --cask mactex-no-gui`).
 
 ## Tests
 

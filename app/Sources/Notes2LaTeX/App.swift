@@ -1,4 +1,4 @@
-// Nabla : projets LaTeX compilés sur ce Mac, avec lecture de formules manuscrites.
+// Nabla : projets LaTeX compilés sur ce Mac.
 import SwiftUI
 import UniformTypeIdentifiers
 

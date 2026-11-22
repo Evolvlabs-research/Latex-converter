@@ -1,6 +1,5 @@
 // Autocomplétion LaTeX (commandes, labels, citations, environnements) et éditeur qui l'utilise.
 import AppKit
-import UniformTypeIdentifiers
 
 /// Commandes courantes, les plus utilisées d'abord (c'est l'ordre des propositions),
 /// avec leur nombre d'arguments obligatoires : « frac:2 » insère \frac{}{}.
@@ -109,27 +108,11 @@ func rank(_ items: [String], prefix: String) -> [String] {
     return Array((starts + contains).prefix(40))
 }
 
-/// Une photo de formule qu'on peut lire : image ou tracé InkML.
-func isPhoto(_ url: URL) -> Bool {
-    url.pathExtension.lowercased() == "inkml" || UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
-}
-
-/// Image du presse-papiers ou d'un glisser-déposer, écrite en PNG temporaire pour le lecteur de formules.
-func savePNG(_ image: NSImage) -> URL? {
-    guard let tiff = image.tiffRepresentation,
-          let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return nil }
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-\(UUID().uuidString).png")
-    return (try? png.write(to: url)) != nil ? url : nil
-}
-
 // MARK: - Éditeur
 
 /// Éditeur avec complétion sans insertion provisoire : le choix n'est inséré qu'avec Entrée ou Tab.
 /// Une commande reçoit ses accolades (curseur dans la première), un \begin{…} reçoit son \end{…}.
-/// Coller ou déposer une image lance la lecture de formule.
 final class LaTeXTextView: NSTextView {
-    var onPhoto: ((URL) -> Void)?
-
     override var rangeForUserCompletion: NSRange {
         completionContext(string as NSString, cursor: selectedRange().location)?.range ?? super.rangeForUserCompletion
     }
@@ -179,29 +162,5 @@ final class LaTeXTextView: NSTextView {
             at += 1
         }
         setSelectedRange(NSRange(location: at, length: 0))
-    }
-
-    override func paste(_ sender: Any?) {
-        let board = NSPasteboard.general
-        if board.string(forType: .string) == nil, let image = NSImage(pasteboard: board), let url = savePNG(image), let onPhoto {
-            onPhoto(url)  // capture d'écran copiée (⌃⇧⌘4) : on lit la formule
-            return
-        }
-        super.paste(sender)
-    }
-
-    // Sans ces types, un éditeur en texte brut grise « Coller » quand le presse-papiers ne contient qu'une image.
-    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] { super.readablePasteboardTypes + [.png, .tiff] }
-    override var acceptableDragTypes: [NSPasteboard.PasteboardType] { super.acceptableDragTypes + [.fileURL, .png, .tiff] }
-
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        let board = sender.draggingPasteboard
-        let file = (board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL])?.first(where: isPhoto)
-        let photo = file ?? (board.string(forType: .string) == nil ? NSImage(pasteboard: board).flatMap(savePNG) : nil)
-        guard let photo, let onPhoto else { return super.performDragOperation(sender) }
-        // La formule ira là où on a lâché l'image.
-        setSelectedRange(NSRange(location: characterIndexForInsertion(at: convert(sender.draggingLocation, from: nil)), length: 0))
-        onPhoto(photo)
-        return true
     }
 }

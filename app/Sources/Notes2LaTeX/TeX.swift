@@ -1,9 +1,5 @@
-// Outils en ligne de commande : latexmk (compilation), synctex (lien source <-> PDF) ; lecture des photos (Reader.swift).
+// Outils en ligne de commande : latexmk (compilation) et synctex (lien source <-> PDF).
 import AppKit
-
-// Chemin du dépôt figé à la compilation : seulement pour les tests et `swift run` (modèle hors de l'app).
-let repo = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 // Les apps lancées depuis le Finder n'ont pas le PATH du terminal : on cherche aux emplacements habituels.
 let texDirs = ["/opt/homebrew/bin", "/Library/TeX/texbin", "/usr/local/bin"]
@@ -195,57 +191,6 @@ func synctexView(pdf: URL, file: String, line: Int, root: URL) async -> (page: I
         if path.allSatisfy(\.isASCII) { break }  // sans accent, les deux formes sont identiques
     }
     return nil
-}
-
-// MARK: - Photo -> LaTeX
-
-/// Lecteur de formules (Reader.swift) chargé à la première lecture, puis gardé : les lectures suivantes sont rapides.
-/// Le modèle est dans Nabla.app (Contents/Resources/Model, copié par build.sh) ; hors de l'app, dans app/Model du dépôt.
-actor Predictor {
-    static let shared = Predictor()
-    private var reader: FormulaReader?
-
-    static var modelDir: URL {
-        let bundled = Bundle.main.resourceURL?.appendingPathComponent("Model")
-        if let bundled, FileManager.default.fileExists(atPath: bundled.appendingPathComponent("vocab.json").path) { return bundled }
-        return repo.appendingPathComponent("app/Model")  // swift run, swift test
-    }
-
-    func read(_ file: URL) async -> Result<String, PredictError> {
-        do {
-            if reader == nil { reader = try await FormulaReader.load(from: Self.modelDir) }
-            return .success(try reader!.read(file))
-        } catch let e as ReadError {
-            return .failure(PredictError(e.message))
-        } catch {
-            return .failure(PredictError(error.localizedDescription))
-        }
-    }
-}
-
-struct PredictError: Error {
-    let message: String
-    init(_ message: String) { self.message = message }
-}
-
-/// Document d'une formule seule : ce préambule doit rendre tout ce que le modèle sait écrire (test de stress).
-func formulaDocument(_ latex: String) -> String {
-    "\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n$\\displaystyle \(latex)$\n\\end{document}\n"
-}
-
-/// Rendu d'une formule seule (pour vérifier une lecture avant de l'insérer) ; nil si elle ne compile pas.
-func renderFormula(_ latex: String) async -> NSImage? {
-    guard let tex = findTool("pdflatex") else { return nil }
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-formule-\(UUID().uuidString)")
-    defer { try? FileManager.default.removeItem(at: dir) }
-    let doc = formulaDocument(latex)
-    do {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try doc.write(to: dir.appendingPathComponent("f.tex"), atomically: true, encoding: .utf8)
-    } catch { return nil }
-    let r = await run(tex, ["-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", "f.tex"], in: dir, timeout: 20)
-    guard r.status == 0, let data = try? Data(contentsOf: dir.appendingPathComponent("f.pdf")) else { return nil }
-    return NSImage(data: data)
 }
 
 // MARK: - Plan du document

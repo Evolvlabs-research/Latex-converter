@@ -6,8 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(name: "Notes2LaTeX"),
-        // Fichiers lus par leur chemin dans les tests, pas des ressources.
-        .testTarget(name: "Notes2LaTeXTests", dependencies: ["Notes2LaTeX"],
-                    exclude: ["Stress", "photo.png", "photo-python.png", "ink-python.png", "reference.json"]),
+        // Projet de stress lu par son chemin dans les tests, pas une ressource.
+        .testTarget(name: "Notes2LaTeXTests", dependencies: ["Notes2LaTeX"], exclude: ["Stress"]),
     ]
 )

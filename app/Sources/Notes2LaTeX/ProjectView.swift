@@ -16,7 +16,7 @@ struct ProjectView: View {
 
     var body: some View {
         NavigationSplitView {
-            sidebar.navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 360)
+            sidebar.navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 360)  // sous 220, le bouton « + » disparaît
         } detail: {
             HSplitView {
                 editorPane.frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
@@ -26,11 +26,6 @@ struct ProjectView: View {
         .navigationTitle(project.name)
         .navigationSubtitle(project.status)
         .toolbar { toolbar }
-        .sheet(item: $project.review) { review in
-            FormulaReviewView(review: review,
-                              insert: { latex in project.review = nil; project.editor.insertFormula(latex) },
-                              cancel: { project.review = nil })
-        }
         .sheet(isPresented: $showHistory) {
             if let file = project.current { HistoryView(project: project, file: file) { showHistory = false } }
         }
@@ -150,12 +145,7 @@ struct ProjectView: View {
 
     @ToolbarContentBuilder var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if project.compiling || project.reading { ProgressView().controlSize(.small) }
-            Button(action: pickPhoto) { Label("Lire une photo", systemImage: "text.viewfinder") }
-                .labelStyle(.titleAndIcon)
-                .help("Lire une formule manuscrite (photo ou InkML) et l'insérer au curseur — ⇧⌘I")
-                .keyboardShortcut("i", modifiers: [.command, .shift])
-                .disabled(project.reading || !project.isEditingText)
+            if project.compiling { ProgressView().controlSize(.small) }
             Button(action: project.showInPDF) { Label("Montrer dans le PDF", systemImage: "doc.text.magnifyingglass") }
                 .help("Montrer dans le PDF la ligne du curseur — ⌘J. Double-cliquer dans le PDF fait l'inverse.")
                 .keyboardShortcut("j")
@@ -179,14 +169,6 @@ struct ProjectView: View {
                 .help(invertPDF ? "Enregistrer le PDF en sombre (couleurs inversées) — ⌘E" : "Enregistrer le PDF où vous voulez — ⌘E, aussi dans le menu Fichier")
                 .disabled(project.pdfData == nil)
         }
-    }
-
-    func pickPhoto() {
-        let panel = NSOpenPanel()
-        panel.message = "Choisir une photo de formule manuscrite ou un fichier InkML"
-        panel.allowedContentTypes = [.image, UTType(filenameExtension: "inkml") ?? .xml]
-        guard panel.runModal() == .OK, let file = panel.url else { return }
-        project.readPhoto(file)
     }
 
     func pickImports() {
@@ -423,84 +405,6 @@ final class FittingPDFView: PDFView {
         guard document != nil else { return }
         let s = min(scaleFactorForSizeToFit, 2.5)
         if s > 0 { scaleFactor = s }
-    }
-}
-
-// MARK: - Vérification d'une formule lue
-
-struct FormulaReviewView: View {
-    let review: FormulaReview
-    let insert: (String) -> Void
-    let cancel: () -> Void
-    @State private var latex: String
-    @State private var rendered: NSImage?
-    @State private var renderFailed = false
-
-    init(review: FormulaReview, insert: @escaping (String) -> Void, cancel: @escaping () -> Void) {
-        self.review = review
-        self.insert = insert
-        self.cancel = cancel
-        _latex = State(initialValue: review.latex)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Vérifier la formule").font(.title3.weight(.semibold))
-            HStack(spacing: 12) {
-                paper("Photo") {
-                    if let image = NSImage(contentsOf: review.photo) {
-                        Image(nsImage: image).resizable().scaledToFit()
-                    } else {
-                        Label(review.photo.lastPathComponent, systemImage: "scribble").foregroundStyle(.black.opacity(0.6))
-                    }
-                }
-                paper("Rendu") {
-                    if let rendered {
-                        Image(nsImage: rendered).resizable().scaledToFit()
-                    } else if renderFailed {
-                        Label("Ne compile pas", systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                    } else {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-            }
-            .frame(height: 170)
-            TextField("LaTeX", text: $latex, axis: .vertical)
-                .font(.body.monospaced())
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...4)
-            Text("Corrigez la formule si besoin : le rendu suit.").font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Annuler", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
-                Button("Insérer") { insert(latex) }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(latex.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 580)
-        .task(id: latex) {
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled else { return }
-            let image = await renderFormula(latex)
-            guard !Task.isCancelled else { return }
-            rendered = image
-            renderFailed = image == nil
-        }
-    }
-
-    /// Fond blanc dans les deux modes : la photo et le rendu sont de l'encre sur du papier.
-    func paper(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            content()
-                .padding(12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator))
-        }
     }
 }
 

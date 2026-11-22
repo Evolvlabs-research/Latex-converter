@@ -7,7 +7,6 @@ import SwiftUI
     weak var textView: NSTextView?
     var pendingLine: Int?  // ligne à montrer dès que le fichier demandé est affiché
     var sources: () -> CompletionSources = { CompletionSources() }  // labels, clés, environnements du projet
-    var onPhoto: (URL) -> Void = { _ in }  // image collée ou déposée dans l'éditeur
 
     var currentLine: Int {
         guard let tv = textView else { return 1 }
@@ -25,19 +24,6 @@ import SwiftUI
         tv.setSelectedRange(range)
         tv.scrollRangeToVisible(range)
         tv.showFindIndicator(for: range)
-    }
-
-    func insertFormula(_ latex: String) {
-        guard let tv = textView else { return }
-        let ns = tv.string as NSString
-        let at = insertionPoint(in: tv.string, cursor: tv.selectedRange().location)
-        let newline = at > 0 && ns.character(at: at - 1) != 10 ? "\n" : ""
-        let block = newline + "\\[\n" + latex + "\n\\]\n"
-        tv.insertText(block, replacementRange: NSRange(location: at, length: 0))
-        let formula = NSRange(location: at + (newline + "\\[\n" as NSString).length, length: (latex as NSString).length)
-        tv.window?.makeFirstResponder(tv)
-        tv.setSelectedRange(formula)  // formule sélectionnée : on voit ce qui a été lu, prête à corriger
-        tv.scrollRangeToVisible(formula)
     }
 }
 
@@ -64,7 +50,6 @@ struct LaTeXEditor: NSViewRepresentable {
         tv.isIncrementalSearchingEnabled = true
         tv.delegate = context.coordinator
         tv.textStorage?.delegate = context.coordinator  // recolore seulement les paragraphes modifiés
-        tv.onPhoto = { controller.onPhoto($0) }
         tv.isRichText = false
         tv.allowsUndo = true
         // LaTeX : ni guillemets courbes, ni tirets longs, ni correction automatique.
@@ -223,18 +208,6 @@ func lineNumber(at location: Int, in starts: [Int]) -> Int {
         if starts[mid] <= location { low = mid + 1 } else { high = mid }
     }
     return low
-}
-
-/// Où insérer une formule (en UTF-16, comme NSTextView) : au début de la ligne du curseur
-/// s'il est dans le corps du document (ou dans un fichier inclus), sinon juste avant \end{document}.
-func insertionPoint(in text: String, cursor: Int) -> Int {
-    let ns = text as NSString
-    let lineStart = ns.lineRange(for: NSRange(location: min(cursor, ns.length), length: 0)).location
-    let end = ns.range(of: "\\end{document}", options: .backwards)
-    guard end.location != NSNotFound else { return lineStart }
-    let begin = ns.range(of: "\\begin{document}")
-    let bodyStart = begin.location == NSNotFound ? 0 : NSMaxRange(ns.lineRange(for: begin))
-    return cursor >= bodyStart && cursor <= end.location ? lineStart : end.location
 }
 
 /// Numéros de ligne dans la marge : un par ligne du fichier (une ligne coupée à l'affichage garde un seul numéro),
