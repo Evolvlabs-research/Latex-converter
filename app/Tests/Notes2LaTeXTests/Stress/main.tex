@@ -1,0 +1,102 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,mathtools,amscd,esint,mathrsfs,bbm,bm,cancel,stmaryrd}
+\usepackage{tikz-cd}
+\usepackage[all]{xy}
+\usepackage{physics}
+\usepackage{siunitx}
+\usepackage[version=4]{mhchem}
+\usepackage{chemfig}
+\usepackage{tensor}
+\usepackage{ytableau}
+\usepackage{nicematrix}
+\usepackage{hyperref}
+
+\DeclarePairedDelimiter\valabs{\lvert}{\rvert}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\norme}[2][2]{\left\lVert #2 \right\rVert_{#1}}
+\makeatletter
+\def\produit#1#2{\left\langle #1 \,\middle|\, #2 \right\rangle}
+\makeatother
+
+\begin{document}
+
+\section[Diagrammes]{Diagrammes $\mathscr{C}$ et \texorpdfstring{$\infty$}{infini}-catégories}\label{sec:diag}
+Un carré commutatif (tikz-cd) :
+\[
+\begin{tikzcd}
+A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
+C \arrow[r, "k"'] \arrow[ur, dashed, "\exists!"] & D
+\end{tikzcd}
+\qquad
+\begin{CD}
+X @>\varphi>> Y \\
+@VVV @AAA \\
+Z @= Z
+\end{CD}
+\qquad
+\xymatrix{ E \ar[r]^{p} & F \ar@{->>}[d] \\ & G }
+\]
+
+\section{Analyse}
+\begin{equation}\label{eq:Navier–Stokes_2}
+\oiint_{\partial V} \bm{u}\cdot\dd{\bm{S}} = \iiint_V \div{\bm{u}} \dd{V},
+\qquad \pdv[2]{f}{x} + \dv{g}{t} = \comm{A}{B} + \bra{\psi}\ket{\phi}.
+\end{equation}
+Une fraction continue :
+\[
+x = a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{a_3 + \cfrac{1}{\ddots}}}}
+\quad
+\sum_{\substack{0 \le i \le m \\ 0 < j < n}} P(i,j)
+\quad
+\sideset{_*^*}{'}\sum_{k} a_k
+\quad
+\operatorname*{arg\,max}_{x \in \R} \valabs*{\frac{f(x)}{g(x)}}
+\]
+\[
+\overbrace{a + \underbrace{b + c}_{\text{deux}} + d}^{\text{trois}}
+\overset{!}{=} \underset{n\to\infty}{\lim} u_n
+\coloneqq \prescript{14}{6}{\mathrm{C}}
+\xRightarrow[\text{bas}]{\text{haut}} \cancelto{0}{x} + \bcancel{y} + \xcancel{z}
+\]
+\[
+\tensor{R}{^a_b_c^d} \qquad \mathbbm{1}_A \qquad \llbracket 1, n \rrbracket \qquad \norme[\infty]{f}
+\qquad \produit{\varphi}{\psi}
+\qquad
+\begin{dcases}
+\frac{1}{x} & \text{si } x > 0 \\
+\int_0^1 t^2 \, \mathrm{d}t & \text{sinon}
+\end{dcases}
+\]
+\[
+\begin{pNiceMatrix}[first-row,last-col]
+C_1 & \Cdots & C_n & \\
+a_{11} & \Cdots & a_{1n} & L_1 \\
+\Vdots & \Ddots & \Vdots & \Vdots \\
+a_{n1} & \Cdots & a_{nn} & L_n
+\end{pNiceMatrix}
+\qquad
+\left(\begin{array}{c|cc}
+1 & 0 & 0 \\ \hline
+0 & \alpha & \beta
+\end{array}\right)
+\]
+
+\section{Physique et chimie}
+$g = \SI{9.81}{\metre\per\second\squared}$, $e = \num{1.602e-19}$ C, 50\% des cas.
+\ce{2H2 + O2 -> 2H2O}, \ce{^{14}_{6}C}, \chemfig{*6(=-=-=-)}, \ydiagram{3,2,1}.
+Retour à la ligne puis commentaire : a\\% ceci est un vrai commentaire
+Voir l'équation~\eqref{eq:Navier–Stokes_2}, la section~\ref{sec:diag} et~\cite[th.~2]{knuth, lamport}.
+
+\begin{verbatim}
+\section{Faux titre dans du verbatim}
+% pas un commentaire ici
+\end{verbatim}
+\verb|\section{aussi faux}|
+
+\input{chapitres/théorie des groupes}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

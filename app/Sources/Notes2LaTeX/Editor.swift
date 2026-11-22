@@ -172,12 +172,14 @@ func baseAttributes() -> [NSAttributedString.Key: Any] {
 // Couleurs système : elles s'adaptent seules au mode clair et au mode sombre, avec un contraste suffisant
 // (pas de tertiaryLabelColor, trop pâle pour du texte). Les commentaires sont aussi en italique :
 // la couleur seule ne suffit pas à les distinguer. Une règle plus bas l'emporte sur celles du dessus.
-let syntax: [(regex: NSRegularExpression, color: NSColor, italic: Bool)] = [
-    (try! NSRegularExpression(pattern: #"[{}\[\]]"#), .secondaryLabelColor, false),
-    (try! NSRegularExpression(pattern: #"\\[A-Za-z@]+\*?|\\."#), .systemBlue, false),
-    (try! NSRegularExpression(pattern: #"\\(?:begin|end)\{[^}]*\}"#), .systemPurple, false),
-    (try! NSRegularExpression(pattern: #"\$\$?|\\\[|\\\]|\\\(|\\\)"#), .systemOrange, false),
-    (try! NSRegularExpression(pattern: #"(?<!\\)%.*$"#, options: .anchorsMatchLines), .secondaryLabelColor, true),
+// `group` : partie de la correspondance à colorer (0 : toute).
+let syntax: [(regex: NSRegularExpression, color: NSColor, italic: Bool, group: Int)] = [
+    (try! NSRegularExpression(pattern: #"[{}\[\]]"#), .secondaryLabelColor, false, 0),
+    (try! NSRegularExpression(pattern: #"\\[A-Za-z@]+\*?|\\."#), .systemBlue, false, 0),
+    (try! NSRegularExpression(pattern: #"\\(?:begin|end)\{[^}]*\}"#), .systemPurple, false, 0),
+    (try! NSRegularExpression(pattern: #"\$\$?|\\\[|\\\]|\\\(|\\\)"#), .systemOrange, false, 0),
+    // Commentaire : « % » précédé d'un nombre pair de « \ » (« \% » est un pourcentage, « \\% » un commentaire).
+    (try! NSRegularExpression(pattern: #"(?:^|[^\\])(?:\\\\)*(%.*)$"#, options: .anchorsMatchLines), .secondaryLabelColor, true, 1),
 ]
 
 /// Colore `range` (des paragraphes entiers : aucune règle ne déborde sur la ligne suivante), ou tout le texte.
@@ -189,7 +191,7 @@ func highlight(_ storage: NSTextStorage, in range: NSRange? = nil) {
     storage.setAttributes(base, range: target)
     for rule in syntax {
         rule.regex.enumerateMatches(in: storage.string, range: target) { match, _, _ in
-            guard let r = match?.range else { return }
+            guard let r = match?.range(at: rule.group), r.location != NSNotFound else { return }
             storage.addAttribute(.foregroundColor, value: rule.color, range: r)
             if rule.italic { storage.addAttribute(.font, value: italic, range: r) }
         }

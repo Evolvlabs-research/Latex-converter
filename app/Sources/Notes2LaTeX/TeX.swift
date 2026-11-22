@@ -181,10 +181,20 @@ func synctexEdit(pdf: URL, page: Int, x: Double, y: Double, root: URL) async -> 
 /// Ligne d'un fichier -> page (à partir de 1) et boîte : x, ligne de base y depuis le haut, largeur, hauteur.
 func synctexView(pdf: URL, file: String, line: Int, root: URL) async -> (page: Int, x: Double, y: Double, width: Double, height: Double)? {
     guard let tool = findTool("synctex") else { return nil }
-    let r = await run(tool, ["view", "-i", "\(line):1:\(root.appendingPathComponent(file).path)", "-o", pdf.path], in: root)
-    let num = { (key: String) in synctexField(r.out, key).flatMap { Double($0) } }
-    guard let page = num("Page"), let h = num("h"), let v = num("v") else { return nil }
-    return (Int(page), h, v, num("W") ?? 0, num("H") ?? 0)
+    let path = root.appendingPathComponent(file).path
+    // synctex compare le nom octet pour octet avec celui du \input, en général composé (« é » en un caractère).
+    // Process décompose les accents de ses arguments et de son environnement : le nom passe par un fichier,
+    // que le shell relit tel quel. Forme composée d'abord, puis décomposée.
+    for form in [path.precomposedStringWithCanonicalMapping, path.decomposedStringWithCanonicalMapping] {
+        let argFile = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-synctex-\(UUID().uuidString)")
+        guard (try? "\(line):1:\(form)".write(to: argFile, atomically: true, encoding: .utf8)) != nil else { return nil }
+        let r = await run("/bin/sh", ["-c", #"exec "$0" view -i "$(cat "$1")" -o "$2""#, tool, argFile.path, pdf.path], in: root)
+        try? FileManager.default.removeItem(at: argFile)
+        let num = { (key: String) in synctexField(r.out, key).flatMap { Double($0) } }
+        if let page = num("Page"), let h = num("h"), let v = num("v") { return (Int(page), h, v, num("W") ?? 0, num("H") ?? 0) }
+        if path.allSatisfy(\.isASCII) { break }  // sans accent, les deux formes sont identiques
+    }
+    return nil
 }
 
 // MARK: - Photo -> LaTeX
@@ -218,12 +228,17 @@ struct PredictError: Error {
     init(_ message: String) { self.message = message }
 }
 
+/// Document d'une formule seule : ce préambule doit rendre tout ce que le modèle sait écrire (test de stress).
+func formulaDocument(_ latex: String) -> String {
+    "\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n$\\displaystyle \(latex)$\n\\end{document}\n"
+}
+
 /// Rendu d'une formule seule (pour vérifier une lecture avant de l'insérer) ; nil si elle ne compile pas.
 func renderFormula(_ latex: String) async -> NSImage? {
     guard let tex = findTool("pdflatex") else { return nil }
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nabla-formule-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: dir) }
-    let doc = "\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n$\\displaystyle \(latex)$\n\\end{document}\n"
+    let doc = formulaDocument(latex)
     do {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try doc.write(to: dir.appendingPathComponent("f.tex"), atomically: true, encoding: .utf8)
@@ -248,8 +263,19 @@ let sectionLevels = ["part": 0, "chapter": 1, "section": 2, "subsection": 3, "su
 func documentOutline(_ file: String, read: (String) -> String?, depth: Int = 0) -> [OutlineItem] {
     guard depth < 10, let text = read(file) else { return [] }
     var items: [OutlineItem] = []
+    var verbatim: String?  // environnement verbatim en cours : son contenu n'est pas du LaTeX
     for (i, raw) in text.components(separatedBy: "\n").enumerated() {
-        let line = raw.replacing(#/(^|[^\\])%.*/#) { $0.1 }  // sans les commentaires (mais « \% » reste)
+        if let env = verbatim {
+            if raw.contains("\\end{\(env)}") { verbatim = nil }
+            continue
+        }
+        if let m = raw.firstMatch(of: #/\\begin\{(verbatim\*?|Verbatim|lstlisting|minted|comment)\}/#) {
+            verbatim = String(m.1)
+            continue
+        }
+        let line = raw
+            .replacing(#/\\verb\*?([^A-Za-z\s]).*?\1/#, with: "")  // \verb|\section{…}| n'est pas un titre
+            .replacing(#/(^|[^\\])((?:\\\\)*)%.*/#) { $0.1 + $0.2 }  // sans commentaire ; « \% » reste, « \\% » commente
         for m in line.matches(of: #/\\(part|chapter|section|subsection|subsubsection|input|include)\*?(?:\[[^\]]*\])?\{/#) {
             guard let arg = balancedArgument(line[m.range.upperBound...]) else { continue }
             let command = String(m.1)
