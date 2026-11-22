@@ -45,9 +45,10 @@ func modificationDate(_ url: URL) -> Date? {
         compile()
         Task { [weak self] in  // un autre éditeur ou Git peut modifier le fichier ouvert à tout moment
             while true {
-                try? await Task.sleep(for: .seconds(1))
+                // Au premier plan seulement : au retour dans l'app, reload() relit de toute façon le fichier.
+                try? await Task.sleep(for: .seconds(1), tolerance: .milliseconds(500))
                 guard let self else { return }
-                self.checkDisk()
+                if NSApp.isActive { self.checkDisk() }
             }
         }
     }

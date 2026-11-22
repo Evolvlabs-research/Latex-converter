@@ -63,6 +63,7 @@ struct LaTeXEditor: NSViewRepresentable {
         tv.usesFindBar = true  // ⌘F : rechercher et remplacer dans le fichier
         tv.isIncrementalSearchingEnabled = true
         tv.delegate = context.coordinator
+        tv.textStorage?.delegate = context.coordinator  // recolore seulement les paragraphes modifiés
         tv.onPhoto = { controller.onPhoto($0) }
         tv.isRichText = false
         tv.allowsUndo = true
@@ -75,8 +76,7 @@ struct LaTeXEditor: NSViewRepresentable {
         tv.isAutomaticTextCompletionEnabled = false
         tv.textContainerInset = NSSize(width: 18, height: 18)
         tv.typingAttributes = baseAttributes()
-        tv.string = text
-        highlight(tv.textStorage!)
+        tv.string = text  // coloré par le délégué du texte
         controller.textView = tv
         if let line = controller.pendingLine {
             controller.pendingLine = nil
@@ -88,8 +88,7 @@ struct LaTeXEditor: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         let tv = scroll.documentView as! NSTextView
         if tv.string != text {
-            tv.string = text
-            highlight(tv.textStorage!)
+            tv.string = text  // coloré par le délégué du texte
             tv.undoManager?.removeAllActions()  // autre fichier, ou modifié ailleurs : l'historique ne s'applique plus
         }
         if (tv.typingAttributes[.font] as? NSFont).map({ Double($0.pointSize) }) != fontSize {  // taille du texte changée dans le menu
@@ -103,7 +102,7 @@ struct LaTeXEditor: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
         let text: Binding<String>
         let controller: EditorController
         private var typed: Character?  // caractère tapé au clavier (pas un collage ni une complétion)
@@ -117,9 +116,15 @@ struct LaTeXEditor: NSViewRepresentable {
             return true
         }
 
+        // Toute modification du texte (frappe, collage, annulation, complétion, autre fichier) passe ici.
+        func textStorage(_ storage: NSTextStorage, didProcessEditing mask: NSTextStorageEditActions,
+                         range: NSRange, changeInLength: Int) {
+            guard mask.contains(.editedCharacters) else { return }
+            highlight(storage, in: (storage.string as NSString).paragraphRange(for: range))
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
-            highlight(tv.textStorage!)
             text.wrappedValue = tv.string
             // Frappe dans « \fr », « \ref{ », « \cite{ », « \begin{ » : ouvrir la liste (après la frappe, pas pendant).
             guard let typed, tv.selectedRange().length == 0,
@@ -175,20 +180,41 @@ let syntax: [(regex: NSRegularExpression, color: NSColor, italic: Bool)] = [
     (try! NSRegularExpression(pattern: #"(?<!\\)%.*$"#, options: .anchorsMatchLines), .secondaryLabelColor, true),
 ]
 
-func highlight(_ storage: NSTextStorage) {
-    let all = NSRange(location: 0, length: storage.length)
+/// Colore `range` (des paragraphes entiers : aucune règle ne déborde sur la ligne suivante), ou tout le texte.
+func highlight(_ storage: NSTextStorage, in range: NSRange? = nil) {
+    let target = range ?? NSRange(location: 0, length: storage.length)
     let base = baseAttributes()
     let italic = NSFontManager.shared.convert(base[.font] as! NSFont, toHaveTrait: .italicFontMask)
-    storage.beginEditing()
-    storage.setAttributes(base, range: all)
+    if range == nil { storage.beginEditing() }  // pas pendant le traitement d'une modification par le délégué
+    storage.setAttributes(base, range: target)
     for rule in syntax {
-        rule.regex.enumerateMatches(in: storage.string, range: all) { match, _, _ in
+        rule.regex.enumerateMatches(in: storage.string, range: target) { match, _, _ in
             guard let r = match?.range else { return }
             storage.addAttribute(.foregroundColor, value: rule.color, range: r)
             if rule.italic { storage.addAttribute(.font, value: italic, range: r) }
         }
     }
-    storage.endEditing()
+    if range == nil { storage.endEditing() }
+}
+
+/// Début (en UTF-16) de chaque ligne : calculé une fois par modification, pas à chaque dessin de la marge.
+func lineStarts(_ text: NSString) -> [Int] {
+    let n = text.length
+    var chars = [unichar](repeating: 0, count: n)
+    text.getCharacters(&chars, range: NSRange(location: 0, length: n))
+    var starts = [0]
+    for i in 0..<n where chars[i] == 10 { starts.append(i + 1) }
+    return starts
+}
+
+/// Numéro (à partir de 1) de la ligne qui contient `location`, par recherche dichotomique.
+func lineNumber(at location: Int, in starts: [Int]) -> Int {
+    var low = 0, high = starts.count
+    while low < high {
+        let mid = (low + high) / 2
+        if starts[mid] <= location { low = mid + 1 } else { high = mid }
+    }
+    return low
 }
 
 /// Où insérer une formule (en UTF-16, comme NSTextView) : au début de la ligne du curseur
@@ -210,9 +236,11 @@ final class LineNumberRuler: NSRulerView {
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
         clientView = textView
         ruleThickness = 44
-        for name in [NSText.didChangeNotification, NSTextView.didChangeSelectionNotification] {
-            NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: name, object: textView)
-        }
+        NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSTextView.didChangeSelectionNotification,
+                                               object: textView)
+        // Toute modification, y compris un autre fichier chargé par programme : les débuts de ligne sont à recalculer.
+        NotificationCenter.default.addObserver(self, selector: #selector(textChanged), name: NSTextStorage.didProcessEditingNotification,
+                                               object: textView.textStorage)
         textView.enclosingScrollView?.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSView.boundsDidChangeNotification,
                                                object: textView.enclosingScrollView?.contentView)
@@ -220,7 +248,14 @@ final class LineNumberRuler: NSRulerView {
 
     required init(coder: NSCoder) { fatalError("init(coder:) non utilisé") }
 
+    private var starts: [Int]?
+
     @objc private func redraw() { needsDisplay = true }
+
+    @objc private func textChanged() {
+        starts = nil
+        needsDisplay = true
+    }
 
     // Depuis macOS 14 une vue peut dessiner hors de ses bords : sans ça, le fond de la marge recouvrait l'éditeur.
     override var clipsToBounds: Bool { get { true } set {} }
@@ -236,7 +271,9 @@ final class LineNumberRuler: NSRulerView {
         let ns = tv.string as NSString
         let visible = lm.characterRange(forGlyphRange: lm.glyphRange(forBoundingRect: tv.visibleRect, in: container), actualGlyphRange: nil)
         let cursor = tv.selectedRange().location
-        var line = ns.substring(to: visible.location).filter { $0 == "\n" }.count + 1
+        let starts = self.starts ?? lineStarts(ns)
+        self.starts = starts
+        var line = lineNumber(at: visible.location, in: starts)
         var index = visible.location
         let font = NSFont.monospacedDigitSystemFont(ofSize: max(10, editorFontSize() * 0.8), weight: .regular)
 

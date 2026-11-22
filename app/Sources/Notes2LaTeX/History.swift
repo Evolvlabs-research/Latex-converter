@@ -31,7 +31,8 @@ func snapshots(root: URL, file: String) -> [Snapshot] {
 @discardableResult
 func saveSnapshot(_ text: String, root: URL, file: String, minInterval: TimeInterval = 0, now: Date = .now) -> Bool {
     let existing = snapshots(root: root, file: file)
-    if let last = existing.first, last.text == text || now.timeIntervalSince(last.date) < minInterval { return false }
+    // Le délai d'abord : il évite de relire la dernière version à chaque frappe.
+    if let last = existing.first, now.timeIntervalSince(last.date) < minInterval || last.text == text { return false }
     let dir = historyDir(root: root, file: file)
     let name = ISO8601DateFormatter.string(from: now, timeZone: .current, formatOptions: [.withFullDate, .withFullTime, .withFractionalSeconds])
         .replacingOccurrences(of: ":", with: "-")

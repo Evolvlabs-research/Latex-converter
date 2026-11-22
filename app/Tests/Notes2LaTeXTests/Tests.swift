@@ -97,6 +97,28 @@ final class Tests: XCTestCase {
         XCTAssertGreaterThan(blue.b, blue.r + 0.2, "le bleu doit rester bleu")
     }
 
+    /// Recolorer le seul paragraphe modifié donne exactement la coloration complète.
+    func testIncrementalHighlight() {
+        let text = "\\section{A}\n% commentaire\nx $a$ \\frac{1}{2}\n\\begin{align}\nb\n\\end{align}\n"
+        let edited = NSTextStorage(string: text)
+        highlight(edited)
+        let range = NSRange(location: 14, length: 0)  // dans « % commentaire »
+        edited.replaceCharacters(in: range, with: "\\textbf{gras} % \\fin")
+        highlight(edited, in: (edited.string as NSString).paragraphRange(for: NSRange(location: 14, length: 18)))
+        let fresh = NSTextStorage(string: edited.string)
+        highlight(fresh)
+        XCTAssertTrue(edited.isEqual(to: fresh))
+    }
+
+    func testLineNumbers() {
+        let starts = lineStarts("a\nbc\n\nd" as NSString)
+        XCTAssertEqual(starts, [0, 2, 5, 6])
+        XCTAssertEqual(lineNumber(at: 0, in: starts), 1)
+        XCTAssertEqual(lineNumber(at: 3, in: starts), 2)
+        XCTAssertEqual(lineNumber(at: 5, in: starts), 3)
+        XCTAssertEqual(lineNumber(at: 7, in: starts), 4)
+    }
+
     func testEngineFlag() {
         XCTAssertEqual(engineFlag("% !TEX program = XeLaTeX\n\\documentclass{article}"), "-pdfxe")
         XCTAssertEqual(engineFlag("\\documentclass{article}"), "-pdf")
