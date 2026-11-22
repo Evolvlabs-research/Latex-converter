@@ -16,7 +16,7 @@
 
 ## Installer
 
-1. Télécharger `Nabla.zip` depuis la page des versions (Releases), l'ouvrir, et glisser **Nabla** dans **Applications**.
+1. Télécharger `Nabla.dmg` depuis la page des versions (Releases), l'ouvrir, et glisser **Nabla** sur le raccourci **Applications**.
 2. Au premier lancement, macOS refuse d'ouvrir l'app : elle n'est pas notarisée par Apple (le projet n'a pas de
    compte Apple Developer payant). Pour l'autoriser, une seule fois :
    ouvrir **Réglages Système › Confidentialité et sécurité**, descendre jusqu'au message sur Nabla,
@@ -51,7 +51,7 @@ cd app && swift test
 
 ## Publier une version
 
-`./app/build.sh` laisse `app/Nabla.zip`, à joindre à une version (Release) sur GitHub. Sans compte Apple Developer,
+`./app/build.sh` laisse `app/Nabla.dmg` (l'app et un raccourci vers Applications), à joindre à une version (Release) sur GitHub. Sans compte Apple Developer,
 l'app est signée « ad hoc » (sans certificat) : macOS l'accepte après l'autorisation décrite dans « Installer ».
 Sans cette signature, un Mac à puce Apple déclarerait l'app « endommagée ».
 

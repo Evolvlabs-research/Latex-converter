@@ -37,9 +37,9 @@ if [ -n "$NABLA_SIGN_IDENTITY" ]; then
   codesign --force --options runtime --timestamp --sign "$NABLA_SIGN_IDENTITY" "$APP"
   codesign --verify --strict --verbose=2 "$APP"
   if [ -n "$NABLA_NOTARY_PROFILE" ]; then
-    rm -f Nabla.zip
-    ditto -c -k --keepParent "$APP" Nabla.zip
-    xcrun notarytool submit Nabla.zip --keychain-profile "$NABLA_NOTARY_PROFILE" --wait
+    ditto -c -k --keepParent "$APP" Nabla-notarisation.zip  # Apple reçoit l'app en zip
+    xcrun notarytool submit Nabla-notarisation.zip --keychain-profile "$NABLA_NOTARY_PROFILE" --wait
+    rm Nabla-notarisation.zip
     xcrun stapler staple "$APP"
   fi
 else
@@ -48,7 +48,12 @@ else
   codesign --force --sign - "$APP"
 fi
 codesign --verify --strict "$APP"
-rm -f Nabla.zip
-ditto -c -k --keepParent "$APP" Nabla.zip  # à publier ; une app notarisée y porte son ticket agrafé
+# Image disque à publier : l'app et un raccourci vers Applications, pour l'installer en la glissant dessus.
+STAGE=$(mktemp -d)
+ditto "$APP" "$STAGE/$APP"  # ditto garde la signature intacte
+ln -s /Applications "$STAGE/Applications"
+rm -f Nabla.dmg
+hdiutil create -volname Nabla -srcfolder "$STAGE" -format UDZO -quiet Nabla.dmg
+rm -rf "$STAGE"
 echo "OK : $(pwd)/$APP"
-echo "À publier : $(pwd)/Nabla.zip"
+echo "À publier : $(pwd)/Nabla.dmg"
