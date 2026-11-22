@@ -74,6 +74,12 @@ struct LaTeXEditor: NSViewRepresentable {
         tv.isAutomaticSpellingCorrectionEnabled = false
         tv.isContinuousSpellCheckingEnabled = false
         tv.isAutomaticTextCompletionEnabled = false
+        // Aucune vérification du texte par macOS (liens, dates, langue) : inutile pour du LaTeX, et elle charge
+        // un réseau de détection de langue à chaque modification.
+        tv.isAutomaticLinkDetectionEnabled = false
+        tv.isAutomaticDataDetectionEnabled = false
+        tv.isGrammarCheckingEnabled = false
+        tv.enabledTextCheckingTypes = 0
         tv.textContainerInset = NSSize(width: 18, height: 18)
         tv.typingAttributes = baseAttributes()
         tv.string = text  // coloré par le délégué du texte
