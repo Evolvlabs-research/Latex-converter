@@ -1,7 +1,7 @@
 # Nabla
 
 Éditeur LaTeX pour Mac (macOS 14+, puce Apple ou Intel) et Windows (10 et 11, 64 bits) qui compile en local,
-sans compte ni connexion.
+sans compte ni connexion. Site : https://evolvlabs-research.github.io/Latex-converter/
 
 ## Ce qu'il fait
 
