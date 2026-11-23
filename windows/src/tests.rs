@@ -169,6 +169,8 @@ fn accept_completion() {
 fn failure_message_test() {
     let miktex = "latexmk: major issue: So far, no MiKTeX administrator has checked for updates.";
     assert!(failure_message(miktex).starts_with("MiKTeX demande une recherche de mises à jour"));
+    let per_user = "latexmk: major issue: So far, you have not checked for MiKTeX updates.";
+    assert!(failure_message(per_user).starts_with("MiKTeX demande une recherche de mises à jour"));
     assert_eq!(
         failure_message("x\nLatexmk: oups\n\n"),
         "La compilation a échoué. Latexmk: oups"
