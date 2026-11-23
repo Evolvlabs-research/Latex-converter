@@ -73,9 +73,14 @@ func latexmk(root: URL, main: String, outDir: URL) async -> Build {
     let name = ((main as NSString).lastPathComponent as NSString).deletingPathExtension
     let source = (try? String(contentsOf: root.appendingPathComponent(main), encoding: .utf8)) ?? ""
     // -norc : un latexmkrc livré avec un projet pourrait lancer n'importe quel programme.
+    let start = Date()
     let r = await run(tool, ["-norc", engineFlag(source), "-interaction=nonstopmode", "-synctex=1",
                              "-file-line-error", "-outdir=\(outDir.path)", main], in: root)
-    let logData = (try? Data(contentsOf: outDir.appendingPathComponent(name + ".log"))) ?? Data()
+    let logURL = outDir.appendingPathComponent(name + ".log")
+    // Échec sans nouveau journal (TeX n'a pas tourné) : l'ancien montrerait des erreurs déjà corrigées.
+    let modified = (try? logURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    let fresh = r.status == 0 || (modified ?? .distantPast) >= start
+    let logData = fresh ? (try? Data(contentsOf: logURL)) ?? Data() : Data()
     var log = parseLog(String(decoding: logData, as: UTF8.self), root: root)
     if r.status != 0 && !log.contains(where: { $0.kind == .error }) {
         let last = r.out.split(separator: "\n").last.map(String.init) ?? ""
