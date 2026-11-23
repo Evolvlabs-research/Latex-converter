@@ -49,6 +49,9 @@
 <link rel="modulepreload" href="assets/moments/lib.js">
 <link rel="modulepreload" href="assets/moments/word-highlight/moment.js">
 <style>
+  /* image du haut : la ligne « \fr » et sa liste restent visibles et hors de la carte « À jour », cadre haut ou bandeau large */
+  .hero__media > img { --ly-pos-phone: 0% 52%; }
+  @media (max-width: 639px) { .hero__media > img { --ly-pos-phone: 0% 65%; } }
   /* le logo de Nabla (∇ blanc, fond transparent) à la place d'une marque tirée */
   .nav__logo img { width: 28px; height: 28px; }
   /* la fenêtre de Nabla, capture réelle, en travers du .wrap */
@@ -151,7 +154,7 @@
         </div>
       </div>
       <div class="hero__media span-6 start-7">
-        <img src="img/hero-source.jpg" width="580" height="661" alt="Source LaTeX dans Nabla en mode sombre, la liste de complétion ouverte sous \fr" style="--ly-pos: 0% 60%" fetchpriority="high" data-source="client" data-subject="l'éditeur de Nabla">
+        <img src="img/hero-source.jpg" width="580" height="661" alt="Source LaTeX dans Nabla en mode sombre, la liste de complétion ouverte sous \fr" style="--ly-pos: 0% 47%" fetchpriority="high" data-source="client" data-subject="l'éditeur de Nabla">
         <div class="ly-float">
           <div class="ly-float__row"><span class="ly-live">À jour</span><span>3,1 s</span></div>
           <div class="ly-float__title">main.tex compilé, 3 avertissements</div>
