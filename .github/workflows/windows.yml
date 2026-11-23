@@ -85,4 +85,5 @@ jobs:
       - name: Tests avec LaTeX
         env:
           NABLA_REQUIRE_TEX: "1"
-        run: cargo test --release -- project_build_and_sync templates_compile
+        # un à la fois : MiKTeX installe les paquets manquants pendant la compilation, deux installations à la fois se gênent
+        run: cargo test --release -- --test-threads=1 project_build_and_sync templates_compile

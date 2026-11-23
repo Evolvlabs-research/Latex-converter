@@ -173,6 +173,12 @@ fn failure_message_test() {
         failure_message("x\nLatexmk: oups\n\n"),
         "La compilation a échoué. Latexmk: oups"
     );
+    let windows =
+        "Latexmk: Errors, so I did not complete making targets\r\nReverting Windows console CPs to (in,out) = (437,65001)\r\n";
+    assert_eq!(
+        failure_message(windows),
+        "La compilation a échoué. Latexmk: Errors, so I did not complete making targets"
+    );
 }
 
 #[test]

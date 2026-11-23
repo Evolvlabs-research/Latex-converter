@@ -265,7 +265,13 @@ pub fn failure_message(out: &str) -> String {
                 onglet Mises à jour, cliquez Rechercher les mises à jour, puis recompilez."
             .into();
     }
-    let last = out.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    // Sous Windows, latexmk finit toujours par « Reverting Windows console CPs… » : ce n'est pas la cause.
+    let last = out
+        .lines()
+        .map(str::trim)
+        .rev()
+        .find(|l| !l.is_empty() && !l.starts_with("Reverting Windows console"))
+        .unwrap_or("");
     let hint = if out.contains("perl") && cfg!(windows) {
         " Le latexmk de MiKTeX a besoin de Perl (strawberryperl.com)."
     } else {
