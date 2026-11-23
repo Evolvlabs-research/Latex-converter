@@ -11,6 +11,30 @@ Numérotation `vMAJEUR.MINEUR.CORRECTIF` :
 Chaque version liste ses **nouveautés**, ses **améliorations** et ses **bugs corrigés**.
 La plus récente est en haut ; son numéro est celui que `app/build.sh` donne à l'app.
 
+## v1.1.0 (2026-11-23)
+
+Nabla arrive sur Windows.
+
+### Nouveautés
+
+- Nabla pour Windows 10 et 11 (64 bits), avec les mêmes fonctions que sur Mac : projets et modèles,
+  compilation latexmk, journal, SyncTeX, complétion, plan, historique, PDF en sombre et export.
+  Raccourcis avec Ctrl à la place de ⌘ (Ctrl+J, Ctrl+R, Ctrl+F, Ctrl+H pour remplacer, F3 pour l'occurrence suivante).
+- Installeur `Nabla-1.1.0-installeur.exe`, pour votre compte seul et sans droits d'administrateur,
+  ou `Nabla-1.1.0-windows.zip` à décompresser.
+- Compilation avec MiKTeX ou TeX Live : au premier lancement, l'accueil indique ce qui manque
+  (LaTeX, latexmk, ou Perl pour le latexmk de MiKTeX).
+- Sous Windows, un dossier ou un `.tex` glissé sur Nabla.exe, ou ouvert avec Nabla, s'ouvre directement.
+
+### Améliorations
+
+- Windows : le PDF est dessiné à part, l'éditeur ne gèle jamais pendant le rendu ; sur 5 900 lignes,
+  environ 12 ms par frappe, et rien n'est recalculé quand on ne tape pas.
+
+### Bugs corrigés
+
+- Aucun dans cette version.
+
 ## v1.0.0 (2026-11-22)
 
 Première version publique.

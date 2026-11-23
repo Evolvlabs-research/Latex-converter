@@ -26,8 +26,10 @@ cat >> "$TMP/notes.md" <<EOF
 
 ### Installer
 
-Télécharger \`Nabla-$V.dmg\` ci-dessous, l'ouvrir et glisser **Nabla** sur **Applications**.
-Premier lancement et prérequis (MacTeX) : voir le [README]($REPO/blob/$TAG/README.md#installer).
+- Mac : télécharger \`Nabla-$V.dmg\` ci-dessous, l'ouvrir et glisser **Nabla** sur **Applications**.
+- Windows : télécharger \`Nabla-$V-installeur.exe\` (ou \`Nabla-$V-windows.zip\`) ci-dessous, ajoutés quelques minutes après la publication.
+
+Premier lancement et prérequis (MacTeX, MiKTeX) : voir le [README]($REPO/blob/$TAG/README.md#installer).
 EOF
 
 ./app/build.sh

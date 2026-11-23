@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Nabla : éditeur LaTeX pour Mac, compilé en local</title>
-<meta name="description" content="Nabla affiche la source et le PDF côte à côte et compile avec la distribution LaTeX de votre Mac. Gratuit, open source, macOS 14 et plus récent.">
+<title>Nabla : éditeur LaTeX pour Mac et Windows, compilé en local</title>
+<meta name="description" content="Nabla affiche la source et le PDF côte à côte et compile avec la distribution LaTeX de votre ordinateur. Gratuit, open source, pour macOS 14 et plus récent et Windows 10 et 11.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Nabla : éditeur LaTeX pour Mac, compilé en local">
+<meta property="og:title" content="Nabla : éditeur LaTeX pour Mac et Windows, compilé en local">
 <meta property="og:description" content="La source à gauche, le PDF à droite, sans compte ni connexion. Gratuit et open source.">
 <meta property="og:image" content="share.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -49,6 +49,9 @@
 <link rel="modulepreload" href="assets/moments/lib.js">
 <link rel="modulepreload" href="assets/moments/word-highlight/moment.js">
 <style>
+  /* image du haut : la ligne « \fr » et sa liste restent visibles et hors de la carte « À jour », cadre haut ou bandeau large */
+  .hero__media > img { --ly-pos-phone: 0% 52%; }
+  @media (max-width: 639px) { .hero__media > img { --ly-pos-phone: 0% 65%; } }
   /* le logo de Nabla (∇ blanc, fond transparent) à la place d'une marque tirée */
   .nav__logo img { width: 28px; height: 28px; }
   /* la fenêtre de Nabla, capture réelle, en travers du .wrap */
@@ -56,16 +59,17 @@
   #fenetre .shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 0 0; }
   /* cartes : une hauteur de panneau pour le groupe */
   #ecriture .panel { --p-h: 300px; }
-  #installer .panel { --p-h: 360px; }
+  #installer .panel { --p-h: 290px; }
+  #installer .os-label { margin-block: var(--s-5) var(--s-3); }
   /* le cadre éclairé donne une encre sombre : les fenêtres du cadre reprennent les couleurs de celles des cartes */
   #compilation .frame .stage { --fx-bg: #232323; --fx-surface: var(--p-surface); --fx-ink: var(--p-ink); --fx-muted: #a6a6a6; }
   /* le terminal à la hauteur du texte et de l'écran : même écart entre les sections */
   @media (min-width: 1024px) { #compilation .frame--split { aspect-ratio: auto; height: min(680px, calc(100svh - 220px)); } }
   @media (max-width: 639px) { #ecriture .panel { --p-h: 176px; } }
   /* les trois étapes s'empilent ou passent à deux par ligne : deux écrans sous 1280 px */
-  @media (min-width: 640px) and (max-width: 1279px) { #installer { --h: 2; } }
+  @media (min-width: 640px) and (max-width: 1279px) { #installer { --h: 4; } }
   /* téléphone : les trois étapes remplissent deux écrans */
-  @media (max-width: 639px) { #installer { --hm: 2; } #installer .panel { --p-h: 260px; } }
+  @media (max-width: 639px) { #installer { --hm: 4; } #installer .panel { --p-h: 240px; } }
   /* fragments construits pour Nabla (plan, historique, installation), sur les jetons de l'interface du kit */
   .nb { font: 13px/1.45 var(--font-text); color: var(--u-ink); background: var(--u-bg); border: 1px solid var(--u-border); border-radius: var(--u-r); box-shadow: var(--u-shadow); overflow: hidden; }
   .nb__head { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--u-line); font-weight: 500; }
@@ -113,8 +117,8 @@
             </div>
             <div class="menu-col span-3">
               <p class="t-label">Lire</p>
-              <a href="#fenetre">SyncTeX<span>De la source au PDF, ⌘J</span></a>
-              <a href="#ecriture">PDF sombre<span>Couleurs inversées, ⌥⌘I</span></a>
+              <a href="#fenetre">SyncTeX<span>De la source au PDF, ⌘J ou Ctrl+J</span></a>
+              <a href="#ecriture">PDF sombre<span>Couleurs inversées, ⌥⌘I ou Ctrl+Alt+I</span></a>
               <a href="#compilation">Journal<span>Erreurs avec fichier et ligne</span></a>
             </div>
             <a class="menu-card span-3 start-10" href="#ecriture">
@@ -141,16 +145,16 @@
   <section class="hero hero--split" data-enter aria-labelledby="hero-h">
     <div class="wrap"><div class="hero-text grid hero__grid">
       <div class="hero__text span-5">
-        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Version 1.0.0, pour macOS 14 et plus récent</p>
-        <h1 id="hero-h">Éditeur LaTeX pour Mac, qui compile en local</h1>
-        <p class="hero__lead">La source à gauche, le PDF à droite. Nabla compile avec la distribution LaTeX de votre Mac, sans compte ni connexion. Gratuit, licence MIT.</p>
+        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Pour macOS 14 et plus récent, Windows 10 et 11</p>
+        <h1 id="hero-h">Éditeur LaTeX pour Mac et Windows, qui compile en local</h1>
+        <p class="hero__lead">La source à gauche, le PDF à droite. Nabla compile avec la distribution LaTeX de votre ordinateur, sans compte ni connexion. Gratuit, licence MIT.</p>
         <div class="btn-row">
-          <a class="btn btn--primary" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
-          <a class="btn btn--secondary" href="https://github.com/Evolvlabs-research/Latex-converter">Voir le code</a>
+          <a class="btn btn--primary" data-os="mac" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger pour Mac<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+          <a class="btn btn--secondary" data-os="windows" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger pour Windows</a>
         </div>
       </div>
       <div class="hero__media span-6 start-7">
-        <img src="img/hero-source.jpg" width="580" height="661" alt="Source LaTeX dans Nabla en mode sombre, la liste de complétion ouverte sous \fr" style="--ly-pos: 0% 60%" fetchpriority="high" data-source="client" data-subject="l'éditeur de Nabla">
+        <img src="img/hero-source.jpg" width="580" height="661" alt="Source LaTeX dans Nabla en mode sombre, la liste de complétion ouverte sous \fr" style="--ly-pos: 0% 47%" fetchpriority="high" data-source="client" data-subject="l'éditeur de Nabla">
         <div class="ly-float">
           <div class="ly-float__row"><span class="ly-live">À jour</span><span>3,1 s</span></div>
           <div class="ly-float__title">main.tex compilé, 3 avertissements</div>
@@ -164,7 +168,7 @@
       <div class="grid">
         <h2 class="span-5" id="fenetre-h">Source et PDF dans une fenêtre</h2>
         <div class="span-6 start-7 stack-4">
-          <p>Le PDF se met à jour quand vous arrêtez de taper. ⌘J montre dans le PDF la ligne du curseur, un double-clic dans le PDF ouvre la source.</p>
+          <p>Le PDF se met à jour quand vous arrêtez de taper. ⌘J (Ctrl+J sous Windows) montre dans le PDF la ligne du curseur, un double-clic dans le PDF ouvre la source.</p>
           <a class="link" href="https://github.com/Evolvlabs-research/Latex-converter#readme">Lire le README</a>
         </div>
       </div>
@@ -177,7 +181,7 @@
   <section class="section statement" id="dossiers" data-moment="word-highlight" aria-label="Vos fichiers">
     <div class="wrap">
       <p class="t-label">Vos fichiers</p>
-      <p class="mo-wh__text">Un projet Nabla est un dossier ordinaire sur votre Mac. La compilation passe par la distribution LaTeX déjà installée, et aucun fichier ne part sur <strong>un serveur</strong>.</p>
+      <p class="mo-wh__text">Un projet Nabla est un dossier ordinaire sur votre ordinateur. La compilation passe par la distribution LaTeX déjà installée, et aucun fichier ne part sur <strong>un serveur</strong>.</p>
     </div>
   </section>
 
@@ -185,14 +189,14 @@
     <div class="wrap">
       <div class="grid">
         <div class="span-5 stack-6">
-          <h2 id="compilation-h">Compile avec latexmk, sur votre Mac</h2>
+          <h2 id="compilation-h">Compile avec latexmk, sur votre ordinateur</h2>
           <p class="t-lead">Références, citations et bibliographie sont résolues sans relancer à la main. Pour XeLaTeX ou LuaLaTeX, une ligne en tête du fichier suffit.</p>
           <ul class="facts stack-2">
-            <li>⌘R recompile le document</li>
+            <li>⌘R ou Ctrl+R recompile le document</li>
             <li>Les erreurs donnent le fichier et la ligne</li>
-            <li>⇧⌘L ouvre le journal</li>
+            <li>⇧⌘L ou Ctrl+Maj+L ouvre le journal</li>
           </ul>
-          <a class="link" href="#installer">Installer MacTeX</a>
+          <a class="link" href="#installer">Installer LaTeX</a>
         </div>
         <div class="frame frame--split frame--lit span-6 start-7">
           <div class="stage">
@@ -306,7 +310,7 @@
         </article>
         <article class="card card--row card--open span-6 m-nolift">
           <h3>Passe le PDF en sombre</h3>
-          <p>⌥⌘I inverse les couleurs du PDF à l'écran et à l'export, les teintes gardées. Le texte reste sélectionnable.</p>
+          <p>⌥⌘I (Ctrl+Alt+I) inverse les couleurs du PDF à l'écran et à l'export, les teintes gardées. Le texte reste sélectionnable.</p>
           <div class="panel"><img class="frame__img" src="img/pdf-sombre-page.jpg" width="500" height="560" alt="Page de PDF compilée par Nabla, en couleurs inversées : texte clair sur fond noir" loading="lazy" style="object-position: 50% 0" data-source="client" data-subject="le PDF sombre de Nabla"></div>
         </article>
       </div>
@@ -318,19 +322,21 @@
       <div class="section-head"><h2 id="questions-h">Questions sur Nabla</h2></div>
       <div class="faq">
         <div class="faq__item"><h3>Nabla est-il gratuit ?</h3><p>Oui. Le code est public sur GitHub, sous licence MIT.</p></div>
-        <div class="faq__item"><h3>Faut-il un compte ou une connexion ?</h3><p>Non. Un projet est un dossier sur votre Mac, et la compilation se fait sur place.</p></div>
-        <div class="faq__item"><h3>Sur quels Mac fonctionne-t-il ?</h3><p>macOS 14 ou plus récent, sur puce Apple ou Intel.</p></div>
-        <div class="faq__item"><h3>Pourquoi macOS bloque-t-il le premier lancement ?</h3><p>Nabla n'est pas notarisé : le projet n'a pas de compte Apple Developer. L'autorisation se donne une seule fois.</p></div>
+        <div class="faq__item"><h3>Faut-il un compte ou une connexion ?</h3><p>Non. Un projet est un dossier sur votre ordinateur, et la compilation se fait sur place.</p></div>
+        <div class="faq__item"><h3>Sur quels ordinateurs fonctionne-t-il ?</h3><p>Sur Mac, macOS 14 ou plus récent, puce Apple ou Intel. Sur PC, Windows 10 ou 11 en 64 bits. Les deux apps ont les mêmes fonctions.</p></div>
+        <div class="faq__item"><h3>Pourquoi le premier lancement est-il bloqué ?</h3><p>Nabla n'est ni notarisé par Apple ni signé par un certificat Windows, deux services payants. macOS demande une autorisation, Windows SmartScreen un clic sur Exécuter quand même : une seule fois.</p></div>
         <div class="faq__item"><h3>Peut-on écrire à plusieurs, comme sur Overleaf ?</h3><p>Non, pas d'édition à plusieurs en direct. Le dossier du projet se partage avec Git ou un dossier synchronisé.</p></div>
       </div>
     </div>
   </section>
-  <section class="section" id="installer" aria-labelledby="installer-h">
+  <section class="section g2" id="installer" aria-labelledby="installer-h">
     <div class="wrap">
+      <div class="group">
       <div class="section-head">
         <h2 id="installer-h">Installer Nabla en 3 étapes</h2>
-        <p>Nabla pèse 1,4 Mo ; LaTeX s'installe à part, une fois pour toutes.</p>
+        <p>Sur Mac ou sur Windows ; LaTeX s'installe à part, une fois pour toutes.</p>
       </div>
+      <p class="t-label os-label">Sur Mac</p>
       <div class="grid">
         <article class="card card--row card--open span-4 m-nolift">
           <span class="step-num">1</span>
@@ -382,6 +388,60 @@
           </div>
         </article>
       </div>
+      </div>
+      <div class="group">
+      <p class="t-label os-label">Sur Windows</p>
+      <div class="grid">
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">1</span>
+          <h3>Lancer l'installeur</h3>
+          <p>Téléchargez l'installeur Nabla (.exe) et lancez-le. Il installe Nabla pour votre compte, sans droits d'administrateur.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Installeur de Nabla pour Windows, prêt à installer">
+                <div class="nb__head">Installation de Nabla<span class="ui-meta">7,7 Mo</span></div>
+                <div class="nb__alert">
+                  <p>Nabla sera installé dans votre dossier utilisateur et ajouté au menu Démarrer.</p>
+                  <span class="nb__btn">Installer</span>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">2</span>
+          <h3>Passer SmartScreen</h3>
+          <p>Nabla n'est pas signé par un certificat payant. Informations complémentaires, puis Exécuter quand même.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Avertissement SmartScreen de Windows avec le bouton Exécuter quand même">
+                <div class="nb__head">Windows a protégé votre ordinateur</div>
+                <div class="nb__alert">
+                  <p>Application : Nabla-installeur.exe<br>Éditeur : inconnu</p>
+                  <span class="nb__btn">Exécuter quand même</span>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">3</span>
+          <h3>Installer MiKTeX</h3>
+          <p>Avec winget ou l'installateur de miktex.org, et Strawberry Perl pour latexmk. Au premier lancement, Nabla indique ce qui manque.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="PowerShell avec les commandes d'installation de MiKTeX et de Strawberry Perl par winget">
+                <div class="nb__head">PowerShell<span class="ui-meta">winget</span></div>
+                <div class="nb__term nb__mono">
+                  <span><span class="p">&gt;</span> winget install MiKTeX.MiKTeX</span>
+                  <span><span class="p">&gt;</span> winget install StrawberryPerl.StrawberryPerl</span>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+      </div>
+      </div>
     </div>
   </section>
 
@@ -392,15 +452,18 @@
     <div class="closing__cta close--type">
       <div class="section-head">
         <h2 id="close-h">Nabla est gratuit et open source</h2>
-        <p>1,4 Mo, macOS 14 ou plus récent, puce Apple ou Intel.</p>
+        <p>1,4 Mo pour macOS 14 ou plus récent, puce Apple ou Intel. 7,7 Mo pour Windows 10 et 11.</p>
       </div>
-      <a class="btn btn--primary btn--xl btn--wide" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+      <div class="btn-row">
+        <a class="btn btn--primary btn--xl" data-os="mac" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger pour Mac<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+        <a class="btn btn--secondary btn--xl" data-os="windows" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger pour Windows</a>
+      </div>
     </div>
     <div class="closing__links">
       <div class="grid">
         <div class="span-4 stack-4">
           <a class="nav__logo" href="#top"><img src="img/logo.png" alt="" width="28" height="28" loading="lazy">Nabla</a>
-          <p class="footer__lede">Éditeur LaTeX pour Mac, compilé en local.</p>
+          <p class="footer__lede">Éditeur LaTeX pour Mac et Windows, compilé en local.</p>
         </div>
         <div class="span-2 start-7 footer__col"><h3>Produit</h3><ul><li><a href="#fenetre">Fenêtre</a></li><li><a href="#compilation">Compilation</a></li><li><a href="#ecriture">Écriture</a></li></ul></div>
         <div class="span-2 footer__col"><h3>Aide</h3><ul><li><a href="#questions">Questions</a></li><li><a href="#installer">Installer</a></li></ul></div>
@@ -418,6 +481,17 @@
   <a class="btn btn--primary" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla</a>
 </nav>
 
+<script>
+  // Sur un PC Windows, « Télécharger pour Windows » devient le bouton principal et passe en premier.
+  if (/Windows/.test(navigator.userAgent)) document.querySelectorAll('.btn-row').forEach(row => {
+    const mac = row.querySelector('[data-os="mac"]'), win = row.querySelector('[data-os="windows"]');
+    if (!mac || !win) return;
+    [mac.className, win.className] = [win.className, mac.className];
+    const arrow = mac.querySelector('.m-arrow');
+    if (arrow) win.append(arrow);
+    row.prepend(win);
+  });
+</script>
 <script type="module" src="assets/system.js"></script>
 <script type="module" src="assets/motion/motion.js"></script>
 <script type="module" src="assets/layout/layout.js"></script>
