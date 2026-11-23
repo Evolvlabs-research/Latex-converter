@@ -61,7 +61,8 @@ jobs:
           for ($i = 0; $i -lt 30 -and -not (gh release view $env:GITHUB_REF_NAME 2>$null); $i++) { Start-Sleep 20 }
           gh release upload $env:GITHUB_REF_NAME (Get-ChildItem dist/*.zip, dist/*.exe) --clobber
 
-  # Compilation LaTeX et SyncTeX sous Windows, avec TeX Live (les mêmes tests que sur Mac avec MacTeX).
+  # Compilation LaTeX et SyncTeX sous Windows avec MiKTeX, la distribution conseillée aux utilisateurs
+  # (Perl, dont son latexmk a besoin, est déjà sur les machines windows-latest).
   latex:
     runs-on: windows-latest
     steps:
@@ -69,19 +70,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: windows
-      - uses: teatimeguest/setup-texlive-action@v3
-        with:
-          packages: |
-            scheme-basic
-            collection-latexrecommended
-            collection-fontsrecommended
-            babel-french
-            beamer
-            enumitem
-            latexmk
-            standalone
-            synctex
-            xkeyval
+      - name: MiKTeX
+        run: |
+          choco install miktex --no-progress -y
+          $bin = "$env:ProgramFiles\MiKTeX\miktex\bin\x64"
+          $env:PATH = "$bin;$env:PATH"
+          initexmf --admin --set-config-value "[MPM]AutoInstall=1"  # paquets manquants installés à la compilation
+          miktex --admin packages update-package-database
+          miktex --admin packages install latexmk
+          $bin >> $env:GITHUB_PATH
       - name: Tests avec LaTeX
         env:
           NABLA_REQUIRE_TEX: "1"
