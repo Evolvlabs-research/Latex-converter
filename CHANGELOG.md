@@ -11,6 +11,27 @@ Numérotation `vMAJEUR.MINEUR.CORRECTIF` :
 Chaque version liste ses **nouveautés**, ses **améliorations** et ses **bugs corrigés**.
 La plus récente est en haut ; son numéro est celui que `app/build.sh` donne à l'app.
 
+## v1.1.1 (2026-11-23)
+
+Correctifs sur les messages d'échec de compilation.
+
+### Nouveautés
+
+- Aucune dans cette version.
+
+### Améliorations
+
+- Aucune dans cette version.
+
+### Bugs corrigés
+
+- Windows : quand MiKTeX refuse de compiler avant une recherche de mises à jour, la consigne s'affiche
+  aussi pour une installation « pour moi seul », celle que propose l'installateur de MiKTeX.
+- Windows : cette consigne cite les libellés de la console MiKTeX, qui est en anglais
+  (onglet Updates, bouton Check for updates).
+- Mac et Windows : quand LaTeX ne démarre pas, Nabla n'affiche plus les erreurs de la compilation
+  précédente, déjà corrigées, mais la vraie raison de l'échec.
+
 ## v1.1.0 (2026-11-23)
 
 Nabla arrive sur Windows.
