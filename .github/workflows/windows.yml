@@ -78,6 +78,9 @@ jobs:
           initexmf --admin --set-config-value "[MPM]AutoInstall=1"  # paquets manquants installés à la compilation
           miktex --admin packages update-package-database
           miktex --admin packages install latexmk
+          # sans cette recherche de mises à jour, MiKTeX refuse de compiler (« major issue »)
+          miktex --admin packages check-update
+          miktex packages check-update
           $bin >> $env:GITHUB_PATH
       - name: Tests avec LaTeX
         env:

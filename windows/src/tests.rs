@@ -166,6 +166,16 @@ fn accept_completion() {
 }
 
 #[test]
+fn failure_message_test() {
+    let miktex = "latexmk: major issue: So far, no MiKTeX administrator has checked for updates.";
+    assert!(failure_message(miktex).starts_with("MiKTeX demande une recherche de mises à jour"));
+    assert_eq!(
+        failure_message("x\nLatexmk: oups\n\n"),
+        "La compilation a échoué. Latexmk: oups"
+    );
+}
+
+#[test]
 fn engine_flag_test() {
     assert_eq!(engine_flag("% !TEX program = XeLaTeX\n\\documentclass{article}"), "-pdfxe");
     assert_eq!(engine_flag("%!TEX TS-program = lualatex"), "-pdflua");

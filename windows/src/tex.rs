@@ -249,18 +249,29 @@ pub fn latexmk(root: &Path, main: &str, out_dir: &Path) -> Build {
     let log_text = std::fs::read(out_dir.join(format!("{name}.log"))).unwrap_or_default();
     let mut log = parse_log(&String::from_utf8_lossy(&log_text), root);
     if status != 0 && !log.iter().any(|i| i.kind == Kind::Error) {
-        let last = out.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
-        let hint = if out.contains("perl") && cfg!(windows) {
-            " Le latexmk de MiKTeX a besoin de Perl (strawberryperl.com)."
-        } else {
-            ""
-        };
-        log.insert(0, LogItem::new(Kind::Error, format!("La compilation a échoué. {last}{hint}")));
+        log.insert(0, LogItem::new(Kind::Error, failure_message(&out)));
     }
     Build {
         pdf: std::fs::read(out_dir.join(format!("{name}.pdf"))).ok(),
         log,
     }
+}
+
+/// Échec sans erreur dans le journal TeX : la dernière ligne de latexmk, et quoi faire quand on le sait.
+pub fn failure_message(out: &str) -> String {
+    // MiKTeX tout juste installé refuse de lancer ses programmes tant qu'on n'a pas cherché ses mises à jour.
+    if out.contains("major issue") && out.contains("checked for updates") {
+        return "MiKTeX demande une recherche de mises à jour avant de compiler : ouvrez la console MiKTeX, \
+                onglet Mises à jour, cliquez Rechercher les mises à jour, puis recompilez."
+            .into();
+    }
+    let last = out.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    let hint = if out.contains("perl") && cfg!(windows) {
+        " Le latexmk de MiKTeX a besoin de Perl (strawberryperl.com)."
+    } else {
+        ""
+    };
+    format!("La compilation a échoué. {last}{hint}")
 }
 
 /// Moteur choisi par le commentaire « % !TEX program = xelatex », comme dans TeXShop et Overleaf.
