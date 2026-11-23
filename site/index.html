@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="fr" data-type="software" data-radius="sharp" data-ground="sage" data-buttons="arrow" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nabla : éditeur LaTeX pour Mac, compilé en local</title>
+<meta name="description" content="Nabla affiche la source et le PDF côte à côte et compile avec la distribution LaTeX de votre Mac. Gratuit, open source, macOS 14 et plus récent.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Nabla : éditeur LaTeX pour Mac, compilé en local">
+<meta property="og:description" content="La source à gauche, le PDF à droite, sans compte ni connexion. Gratuit et open source.">
+<meta property="og:image" content="share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.png" type="image/png">
+<meta name="theme-color" content="#0f0f0f">
+<!-- <link rel="canonical" href="https://evolvlabs-research.github.io/Latex-converter/"> : à activer une fois l'adresse Pages connue -->
+<meta name="site-kind" content="software">
+<meta name="page-type" content="software">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400..700&family=Chivo+Mono:wght@400..500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/system.css">
+<link rel="stylesheet" href="assets/ui/cards.css">
+<link rel="stylesheet" href="assets/motion/motion.css">
+<link rel="stylesheet" href="assets/backgrounds/backgrounds.css">
+<link rel="stylesheet" href="assets/layout/layout.css">
+<link rel="stylesheet" href="assets/icons/icon.css">
+<style>
+:root {
+  --p-bg: #0f0f0f; --p-surface: #1a1a1a; --p-ink: #ffffff; --p-muted: #8f8f8f;
+  --p-accent: #dafa9c; --p-accent-ink: #0f0f0f; --p-action: #dafa9c; --p-action-ink: #0f0f0f;
+  --p-inv-bg: #ffffff; --p-inv-surface: #ececec; --p-inv-ink: #0f0f0f; --p-inv-muted: #5f5f5f;
+  --p-inv-accent: #0f0f0f; --p-inv-accent-ink: #ffffff; --p-inv-action: #0f0f0f; --p-inv-action-ink: #ffffff;
+  --font-display: "Chivo", system-ui, sans-serif;
+  --font-text: "Chivo", system-ui, sans-serif;
+  --font-mono: "Chivo Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --display-weight: 400;
+  --display-tracking: -0.03em;
+  --display-tracking-xl: -0.04em;
+  --ly-scale: 0.96;
+}
+</style>
+<link rel="stylesheet" href="assets/ui/base.css">
+<link rel="stylesheet" href="assets/ui/code/fragment.css">
+<link rel="stylesheet" href="assets/ui/terminal-run/fragment.css">
+<script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
+<script src="assets/backgrounds/backgrounds.js"></script>
+<script>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
+<link rel="modulepreload" href="assets/moments/moments.js">
+<link rel="modulepreload" href="assets/moments/lib.js">
+<link rel="modulepreload" href="assets/moments/word-highlight/moment.js">
+<style>
+  /* le logo de Nabla (∇ blanc, fond transparent) à la place d'une marque tirée */
+  .nav__logo img { width: 28px; height: 28px; }
+  /* la fenêtre de Nabla, capture réelle, en travers du .wrap */
+  #fenetre .shot { margin-top: var(--s-7); overflow: hidden; border: 1px solid color-mix(in oklab, var(--ink) 14%, transparent); border-radius: var(--r-lg); }
+  #fenetre .shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 0 0; }
+  /* cartes : une hauteur de panneau pour le groupe */
+  #ecriture .panel { --p-h: 300px; }
+  #installer .panel { --p-h: 360px; }
+  /* le cadre éclairé donne une encre sombre : les fenêtres du cadre reprennent les couleurs de celles des cartes */
+  #compilation .frame .stage { --fx-bg: #232323; --fx-surface: var(--p-surface); --fx-ink: var(--p-ink); --fx-muted: #a6a6a6; }
+  /* le terminal à la hauteur du texte et de l'écran : même écart entre les sections */
+  @media (min-width: 1024px) { #compilation .frame--split { aspect-ratio: auto; height: min(680px, calc(100svh - 220px)); } }
+  @media (max-width: 639px) { #ecriture .panel { --p-h: 176px; } }
+  /* les trois étapes s'empilent ou passent à deux par ligne : deux écrans sous 1280 px */
+  @media (min-width: 640px) and (max-width: 1279px) { #installer { --h: 2; } }
+  /* téléphone : les trois étapes remplissent deux écrans */
+  @media (max-width: 639px) { #installer { --hm: 2; } #installer .panel { --p-h: 260px; } }
+  /* fragments construits pour Nabla (plan, historique, installation), sur les jetons de l'interface du kit */
+  .nb { font: 13px/1.45 var(--font-text); color: var(--u-ink); background: var(--u-bg); border: 1px solid var(--u-border); border-radius: var(--u-r); box-shadow: var(--u-shadow); overflow: hidden; }
+  .nb__head { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--u-line); font-weight: 500; }
+  .nb__head .ui-meta { margin-left: auto; }
+  .nb__list { list-style: none; margin: 0; padding: 6px; }
+  .nb__list li { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: var(--u-r3); }
+  .nb__list li.is-on { background: var(--u-tint); }
+  .nb__list .lvl2 { padding-left: 26px; }
+  .nb__list time, .nb__list .nb__n { margin-left: auto; color: var(--u-muted); font-size: 12px; white-space: nowrap; }
+  .nb__btn { margin-left: auto; padding: 3px 10px; border: 1px solid var(--u-line-2); border-radius: var(--u-r3); font-size: 12px; }
+  .nb__mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .nb__term { padding: 14px; display: grid; gap: 8px; }
+  .nb__term .p { color: var(--u-muted); }
+  .nb__drop { display: flex; gap: 32px; align-items: center; justify-content: center; padding: 28px 16px; }
+  .nb__drop figure { margin: 0; display: grid; justify-items: center; gap: 8px; }
+  .nb__drop img, .nb__drop .nb__folder { width: 64px; height: 64px; border-radius: 14px; }
+  .nb__drop img { background: #000; padding: 10px; }
+  .nb__folder { background: color-mix(in oklab, #5aa9ef 70%, var(--u-bg)); }
+  .nb__arrow { color: var(--u-muted); font-size: 22px; }
+  .nb__alert { padding: 16px; display: grid; gap: 12px; }
+  .nb__alert p { margin: 0; }
+  .nb__alert .nb__btn { justify-self: start; margin: 0; background: var(--u-accent); color: var(--u-accent-ink); border-color: transparent; }
+</style>
+</head>
+<body>
+<!-- type: software
+     deal: hero split, palette soot-pale-lime (le fond quasi noir du mode sombre où l'on écrit, le vert citron pour l'état « à jour »), type chivo (Chivo + Chivo Mono pour la source LaTeX), nav nav-mega, close close-type, footer footer-dark, rhythm surface-pairs (#compilation et #ecriture sur .ground-surface), buttons arrow, mark arc remplacée par le logo du client, radius sharp, ground sage, grounds aucun
+     moments: word-highlight, section #dossiers (les fichiers restent sur le Mac), redistribué après marquee-row qui chevauchait sa pause -->
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#top">Aller au contenu</a>
+    <a class="nav__logo" href="#top"><img src="img/logo.png" alt="" width="28" height="28">Nabla</a>
+    <nav class="nav__links" aria-label="Principale">
+      <div class="nav__item"><a class="nav__link" href="#fenetre">Fenêtre</a></div>
+      <div class="nav__item"><a class="nav__link" href="#compilation">Compilation</a></div>
+      <div class="nav__item">
+        <a class="nav__link" href="#ecriture">Écriture <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <div class="nav__menu">
+          <div class="wrap grid">
+            <div class="menu-col span-3">
+              <p class="t-label">Écrire</p>
+              <a href="#ecriture">Complétion<span>Commandes, \ref et \cite</span></a>
+              <a href="#ecriture">Plan<span>Les titres de tous les fichiers</span></a>
+              <a href="#ecriture">Historique<span>Chaque version d'un fichier</span></a>
+            </div>
+            <div class="menu-col span-3">
+              <p class="t-label">Lire</p>
+              <a href="#fenetre">SyncTeX<span>De la source au PDF, ⌘J</span></a>
+              <a href="#ecriture">PDF sombre<span>Couleurs inversées, ⌥⌘I</span></a>
+              <a href="#compilation">Journal<span>Erreurs avec fichier et ligne</span></a>
+            </div>
+            <a class="menu-card span-3 start-10" href="#ecriture">
+              <div class="panel"><img class="frame__img" src="img/menu-completion.jpg" width="580" height="200" loading="lazy" alt="La liste de complétion de Nabla ouverte sous la saisie \fr" data-source="client" data-subject="complétion dans Nabla"></div>
+              <span class="t-card">Complétion</span>
+              <span class="t-small muted">230 commandes courantes</span>
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="nav__item"><a class="nav__link" href="#questions">Questions</a></div>
+      <div class="nav__item"><a class="nav__link" href="#installer">Installer</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="btn btn--primary" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero hero--split" data-enter aria-labelledby="hero-h">
+    <div class="wrap"><div class="hero-text grid hero__grid">
+      <div class="hero__text span-5">
+        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Version 1.0.0, pour macOS 14 et plus récent</p>
+        <h1 id="hero-h">Éditeur LaTeX pour Mac, qui compile en local</h1>
+        <p class="hero__lead">La source à gauche, le PDF à droite. Nabla compile avec la distribution LaTeX de votre Mac, sans compte ni connexion. Gratuit, licence MIT.</p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+          <a class="btn btn--secondary" href="https://github.com/Evolvlabs-research/Latex-converter">Voir le code</a>
+        </div>
+      </div>
+      <div class="hero__media span-6 start-7">
+        <img src="img/hero-source.jpg" width="580" height="661" alt="Source LaTeX dans Nabla en mode sombre, la liste de complétion ouverte sous \fr" style="--ly-pos: 0% 60%" fetchpriority="high" data-source="client" data-subject="l'éditeur de Nabla">
+        <div class="ly-float">
+          <div class="ly-float__row"><span class="ly-live">À jour</span><span>3,1 s</span></div>
+          <div class="ly-float__title">main.tex compilé, 3 avertissements</div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="section" id="fenetre" aria-labelledby="fenetre-h">
+    <div class="wrap">
+      <div class="grid">
+        <h2 class="span-5" id="fenetre-h">Source et PDF dans une fenêtre</h2>
+        <div class="span-6 start-7 stack-4">
+          <p>Le PDF se met à jour quand vous arrêtez de taper. ⌘J montre dans le PDF la ligne du curseur, un double-clic dans le PDF ouvre la source.</p>
+          <a class="link" href="https://github.com/Evolvlabs-research/Latex-converter#readme">Lire le README</a>
+        </div>
+      </div>
+      <div class="shot frame fill">
+        <img src="img/editeur-clair.jpg" width="1320" height="820" alt="Fenêtre de Nabla : fichiers et plan à gauche, source LaTeX au milieu, PDF compilé à droite" loading="lazy" data-source="client" data-subject="la fenêtre de Nabla">
+      </div>
+    </div>
+  </section>
+
+  <section class="section statement" id="dossiers" data-moment="word-highlight" aria-label="Vos fichiers">
+    <div class="wrap">
+      <p class="t-label">Vos fichiers</p>
+      <p class="mo-wh__text">Un projet Nabla est un dossier ordinaire sur votre Mac. La compilation passe par la distribution LaTeX déjà installée, et aucun fichier ne part sur <strong>un serveur</strong>.</p>
+    </div>
+  </section>
+
+  <section class="section ground-surface" id="compilation" aria-labelledby="compilation-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5 stack-6">
+          <h2 id="compilation-h">Compile avec latexmk, sur votre Mac</h2>
+          <p class="t-lead">Références, citations et bibliographie sont résolues sans relancer à la main. Pour XeLaTeX ou LuaLaTeX, une ligne en tête du fichier suffit.</p>
+          <ul class="facts stack-2">
+            <li>⌘R recompile le document</li>
+            <li>Les erreurs donnent le fichier et la ligne</li>
+            <li>⇧⌘L ouvre le journal</li>
+          </ul>
+          <a class="link" href="#installer">Installer MacTeX</a>
+        </div>
+        <div class="frame frame--split frame--lit span-6 start-7">
+          <div class="stage">
+            <div class="at-rise fit stack-6" style="--fit-max: 480px; --ax: max(32px, 50% - 240px); --ay: 40px" data-ui-loop>
+              <div class="ui ui-panel ui-term" data-ui="terminal-run">
+                <div class="ui-term__head">
+                  <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="ui-term__title">Exemple/main.tex</span>
+                  <span class="ui-meta">latexmk</span>
+                  <span class="ui-spacer"></span>
+                </div>
+                <div class="ui-term__screen" data-term-screen>
+                  <div class="ui-term__track" data-term-track>
+                    <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/Exemple</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>latexmk -pdf main.tex</span></div>
+                    <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>4 sur 4 passes</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">pdflatex main.tex</span><span class="ui-term__n">passe 1</span><span class="ui-term__t">1,02 s</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">bibtex main</span><span class="ui-term__n">refs.bib</span><span class="ui-term__t">0,11 s</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">pdflatex main.tex</span><span class="ui-term__n">passe 2</span><span class="ui-term__t">0,98 s</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">pdflatex main.tex</span><span class="ui-term__n">passe 3</span><span class="ui-term__t">0,97 s</span></div>
+                    <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
+                    <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">PDF</span><span class="ui-term__val">main.pdf, 2 pages</span></div>
+                    <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Journal</span><span class="ui-term__val">3 avertissements</span></div>
+                    <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>À jour</b><span class="ui-term__dim">en 3,1 s</span></div>
+                    <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/Exemple</span><span class="ui-term__sig">$</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
+                  </div>
+                </div>
+              </div>
+              <div class="ui nb" role="img" aria-label="Journal de Nabla : trois avertissements, chacun avec son fichier et sa ligne">
+                <div class="nb__head">Journal<span class="ui-meta">3 avertissements</span></div>
+                <ul class="nb__list">
+                  <li class="is-on"><span class="nb__mono">main.tex:18</span>Citation `knuth84' undefined</li>
+                  <li><span class="nb__mono">groupes.tex:7</span>Overfull \hbox (4.2pt too wide)</li>
+                  <li><span class="nb__mono">main.tex:52</span>Reference `fig:cd' undefined</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section g2 ground-surface" id="ecriture" aria-labelledby="ecriture-h">
+    <div class="wrap">
+      <div class="group">
+        <div class="section-head">
+          <h2 id="ecriture-h">Écrire du LaTeX plus vite. <span class="muted">Complétion, plan, historique et PDF sombre.</span></h2>
+        </div>
+        <div class="grid">
+          <article class="card card--row card--open span-6 m-nolift">
+            <h3>Complète les commandes</h3>
+            <p>Tapez \fr : la liste propose \frac et \frame. Entrée insère les accolades, le curseur dans la première.</p>
+            <div class="panel">
+              <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max: 440px; --ax: max(24px, 50% - 220px); --ay: 40px; --ay-sm: 24px" data-ui-loop>
+                <div class="ui ui-panel ui-code" data-ui="code">
+                  <div class="ui-code__tabs">
+                    <span class="ui-code__tab is-on"><i class="ui-code__lang">TeX</i>main.tex</span>
+                    <span class="ui-code__tab"><i class="ui-code__lang">bib</i>refs.bib</span>
+                    <span class="ui-spacer"></span>
+                    <span class="ui-chip ui-chip--plain ui-code__chip" data-code-chip>À jour</span>
+                  </div>
+                  <pre class="ui-code__pre"><code><span class="ui-code__ln" data-n="42"><span class="k">\section</span>{Analyse}</span>
+<span class="ui-code__ln" data-n="43" data-note="Le \label est proposé ensuite dans \ref et \eqref."><span class="k">\begin</span>{equation}<span class="k">\label</span>{eq:sto}</span>
+<span class="ui-code__ln" data-n="44">  <span class="k">\oint</span> <span class="k">\bm</span>{u}<span class="k">\cdot\dd</span>S</span>
+<span class="ui-code__ln" data-n="45" data-note="\pdv est déjà dans le fichier : la liste le propose aussi.">  <span class="k">\pdv</span>[<span class="n">2</span>]{f}{x} + <span class="k">\dv</span>{g}{t}</span>
+<span class="ui-code__ln" data-n="46"><span class="k">\end</span>{equation}</span>
+<span class="ui-code__ln is-mark" data-n="47">Une fraction : <span class="k">\frac</span>{}{}</span>
+<span class="ui-code__ln" data-n="48"><span class="c">% PDF à jour à la pause</span></span></code></pre>
+                  <div class="ui-code__hint" data-code-hint><span class="ui-dot"></span><span data-code-text>\frac{}{} inséré, le curseur dans la première accolade.</span></div>
+                </div>
+              </div></div>
+            </div>
+          </article>
+          <article class="card card--row card--open span-6 m-nolift">
+            <h3>Affiche le plan du document</h3>
+            <p>Les titres de tous les fichiers du projet, \input et \include compris. Un clic ouvre la ligne du titre.</p>
+            <div class="panel">
+              <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max: 380px; --ax: max(24px, 50% - 190px); --ay: 40px; --ay-sm: 24px">
+                <div class="ui nb" role="img" aria-label="Plan du document dans Nabla : quatre sections et leurs sous-sections">
+                  <div class="nb__head">Plan<span class="ui-meta">main.tex</span></div>
+                  <ul class="nb__list">
+                    <li>Diagrammes et ∞-catégories<span class="nb__n">l. 24</span></li>
+                    <li class="is-on">Analyse<span class="nb__n">l. 42</span></li>
+                    <li class="lvl2">Fractions continues<span class="nb__n">l. 47</span></li>
+                    <li>Physique et chimie<span class="nb__n">l. 61</span></li>
+                    <li>Théorie des groupes<span class="nb__n">chapitres/groupes.tex</span></li>
+                  </ul>
+                </div>
+              </div></div>
+            </div>
+          </article>
+        </div>
+      </div>
+      <div class="grid">
+        <article class="card card--row card--open span-6 m-nolift">
+          <h3>Garde chaque version d'un fichier</h3>
+          <p>Le fichier est enregistré pendant que vous tapez, et chaque version reste dans l'historique, à relire ou à restaurer.</p>
+          <div class="panel">
+            <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max: 380px; --ax: max(24px, 50% - 190px); --ay: 40px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Historique de main.tex dans Nabla : quatre versions avec leur heure">
+                <div class="nb__head">Historique<span class="ui-meta">main.tex</span></div>
+                <ul class="nb__list">
+                  <li class="is-on">Version actuelle<time>maintenant</time></li>
+                  <li>Version de 16:42<span class="nb__btn">Restaurer</span></li>
+                  <li>Version de 15:10<time>il y a 2 h</time></li>
+                  <li>Version d'hier<time>21:37</time></li>
+                </ul>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-6 m-nolift">
+          <h3>Passe le PDF en sombre</h3>
+          <p>⌥⌘I inverse les couleurs du PDF à l'écran et à l'export, les teintes gardées. Le texte reste sélectionnable.</p>
+          <div class="panel"><img class="frame__img" src="img/pdf-sombre-page.jpg" width="500" height="560" alt="Page de PDF compilée par Nabla, en couleurs inversées : texte clair sur fond noir" loading="lazy" style="object-position: 50% 0" data-source="client" data-subject="le PDF sombre de Nabla"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="questions" aria-labelledby="questions-h">
+    <div class="wrap">
+      <div class="section-head"><h2 id="questions-h">Questions sur Nabla</h2></div>
+      <div class="faq">
+        <div class="faq__item"><h3>Nabla est-il gratuit ?</h3><p>Oui. Le code est public sur GitHub, sous licence MIT.</p></div>
+        <div class="faq__item"><h3>Faut-il un compte ou une connexion ?</h3><p>Non. Un projet est un dossier sur votre Mac, et la compilation se fait sur place.</p></div>
+        <div class="faq__item"><h3>Sur quels Mac fonctionne-t-il ?</h3><p>macOS 14 ou plus récent, sur puce Apple ou Intel.</p></div>
+        <div class="faq__item"><h3>Pourquoi macOS bloque-t-il le premier lancement ?</h3><p>Nabla n'est pas notarisé : le projet n'a pas de compte Apple Developer. L'autorisation se donne une seule fois.</p></div>
+        <div class="faq__item"><h3>Peut-on écrire à plusieurs, comme sur Overleaf ?</h3><p>Non, pas d'édition à plusieurs en direct. Le dossier du projet se partage avec Git ou un dossier synchronisé.</p></div>
+      </div>
+    </div>
+  </section>
+  <section class="section" id="installer" aria-labelledby="installer-h">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="installer-h">Installer Nabla en 3 étapes</h2>
+        <p>Nabla pèse 1,4 Mo ; LaTeX s'installe à part, une fois pour toutes.</p>
+      </div>
+      <div class="grid">
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">1</span>
+          <h3>Glisser Nabla dans Applications</h3>
+          <p>Ouvrez l'image disque Nabla-1.0.0.dmg et glissez l'app sur le raccourci Applications.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Fenêtre de l'image disque : l'app Nabla et le raccourci Applications">
+                <div class="nb__head">Nabla<span class="ui-meta">1,4 Mo</span></div>
+                <div class="nb__drop">
+                  <figure><img src="img/logo.png" alt="" width="64" height="64" loading="lazy"><span>Nabla</span></figure>
+                  <span class="nb__arrow" aria-hidden="true">→</span>
+                  <figure><span class="nb__folder" aria-hidden="true"></span><span>Applications</span></figure>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">2</span>
+          <h3>Autoriser le premier lancement</h3>
+          <p>Nabla n'est pas notarisé par Apple. Réglages Système, Confidentialité et sécurité : Ouvrir quand même.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Réglage de sécurité de macOS avec le bouton Ouvrir quand même pour Nabla">
+                <div class="nb__head">Confidentialité et sécurité</div>
+                <div class="nb__alert">
+                  <p>« Nabla » provient d'un développeur non identifié.</p>
+                  <span class="nb__btn">Ouvrir quand même</span>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <span class="step-num">3</span>
+          <h3>Installer MacTeX</h3>
+          <p>Avec Homebrew ou l'installateur de tug.org. Au premier lancement, Nabla indique ce qui manque.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 300px; --ax: max(24px, 50% - 150px); --ay: 48px; --ay-sm: 24px">
+              <div class="ui nb" role="img" aria-label="Terminal avec la commande d'installation de MacTeX par Homebrew">
+                <div class="nb__head">Terminal<span class="ui-meta">zsh</span></div>
+                <div class="nb__term nb__mono">
+                  <span><span class="p">$</span> brew install --cask mactex-no-gui</span>
+                  <span class="p">==&gt; Installing Cask mactex-no-gui</span>
+                </div>
+              </div>
+            </div></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer closing footer--dark ground-inverse" id="contact" aria-labelledby="close-h">
+  <div class="wrap">
+    <div class="closing__cta close--type">
+      <div class="section-head">
+        <h2 id="close-h">Nabla est gratuit et open source</h2>
+        <p>1,4 Mo, macOS 14 ou plus récent, puce Apple ou Intel.</p>
+      </div>
+      <a class="btn btn--primary btn--xl btn--wide" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+    </div>
+    <div class="closing__links">
+      <div class="grid">
+        <div class="span-4 stack-4">
+          <a class="nav__logo" href="#top"><img src="img/logo.png" alt="" width="28" height="28" loading="lazy">Nabla</a>
+          <p class="footer__lede">Éditeur LaTeX pour Mac, compilé en local.</p>
+        </div>
+        <div class="span-2 start-7 footer__col"><h3>Produit</h3><ul><li><a href="#fenetre">Fenêtre</a></li><li><a href="#compilation">Compilation</a></li><li><a href="#ecriture">Écriture</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Aide</h3><ul><li><a href="#questions">Questions</a></li><li><a href="#installer">Installer</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Projet</h3><ul><li><a href="https://github.com/Evolvlabs-research/Latex-converter">Code source</a></li><li><a href="https://github.com/Evolvlabs-research/Latex-converter/releases">Versions</a></li><li><a href="https://github.com/Evolvlabs-research/Latex-converter/blob/main/LICENSE">Licence MIT</a></li></ul></div>
+      </div>
+      <div class="footer__legal">
+        <span>&copy; 2026 Wassim Ghnaya</span>
+        <div class="socials"></div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<nav class="actionbar" aria-label="Actions rapides">
+  <a class="btn btn--primary" href="https://github.com/Evolvlabs-research/Latex-converter/releases/latest">Télécharger Nabla</a>
+</nav>
+
+<script type="module" src="assets/system.js"></script>
+<script type="module" src="assets/motion/motion.js"></script>
+<script type="module" src="assets/layout/layout.js"></script>
+</body>
+</html>
