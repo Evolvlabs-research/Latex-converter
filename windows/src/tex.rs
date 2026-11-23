@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
     sync::{LazyLock, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 include!(concat!(env!("OUT_DIR"), "/shared.rs"));
@@ -245,8 +245,19 @@ pub fn latexmk(root: &Path, main: &str, out_dir: &Path) -> Build {
         &outdir,
         main,
     ];
+    let start = SystemTime::now();
     let (status, out) = run(&tool, &args, root, Duration::from_secs(120));
-    let log_text = std::fs::read(out_dir.join(format!("{name}.log"))).unwrap_or_default();
+    let log_path = out_dir.join(format!("{name}.log"));
+    // Échec sans nouveau journal (MiKTeX bloqué…) : l'ancien montrerait des erreurs déjà corrigées.
+    let fresh = status == 0
+        || std::fs::metadata(&log_path)
+            .and_then(|m| m.modified())
+            .is_ok_and(|t| t >= start);
+    let log_text = if fresh {
+        std::fs::read(&log_path).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let mut log = parse_log(&String::from_utf8_lossy(&log_text), root);
     if status != 0 && !log.iter().any(|i| i.kind == Kind::Error) {
         log.insert(0, LogItem::new(Kind::Error, failure_message(&out)));
@@ -260,9 +271,11 @@ pub fn latexmk(root: &Path, main: &str, out_dir: &Path) -> Build {
 /// Échec sans erreur dans le journal TeX : la dernière ligne de latexmk, et quoi faire quand on le sait.
 pub fn failure_message(out: &str) -> String {
     // MiKTeX tout juste installé refuse de lancer ses programmes tant qu'on n'a pas cherché ses mises à jour.
-    if out.contains("major issue") && out.contains("checked for updates") {
+    // Deux textes : « no MiKTeX administrator has checked for updates » et « you have not checked for MiKTeX updates ».
+    if out.contains("major issue") && out.contains("updates") {
+        // La console MiKTeX n'existe qu'en anglais : on cite ses libellés tels quels.
         return "MiKTeX demande une recherche de mises à jour avant de compiler : ouvrez la console MiKTeX, \
-                onglet Mises à jour, cliquez Rechercher les mises à jour, puis recompilez."
+                onglet Updates, bouton Check for updates, puis recompilez."
             .into();
     }
     // Sous Windows, latexmk finit toujours par « Reverting Windows console CPs… » : ce n'est pas la cause.
