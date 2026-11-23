@@ -72,7 +72,13 @@ jobs:
           workspaces: windows
       - name: MiKTeX
         run: |
-          choco install miktex --no-progress -y
+          # le serveur de MiKTeX ne répond pas toujours depuis GitHub : jusqu'à trois essais
+          for ($i = 1; $i -le 3; $i++) {
+            choco install miktex --no-progress -y --force
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($i -eq 3) { exit 1 }
+            Start-Sleep 60
+          }
           $bin = "$env:ProgramFiles\MiKTeX\miktex\bin\x64"
           $env:PATH = "$bin;$env:PATH"
           initexmf --admin --set-config-value "[MPM]AutoInstall=1"  # paquets manquants installés à la compilation
