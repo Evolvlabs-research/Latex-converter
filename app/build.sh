@@ -25,7 +25,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleIdentifier</key><string>org.evolvlabs.nabla</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
-  <key>NSHumanReadableCopyright</key><string>© 2026 Wassim Ghnaya. Licence MIT.</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Wassim Ghnaya. Tous droits réservés.</string>
   <key>CFBundleName</key><string>Nabla</string>
   <key>CFBundleDisplayName</key><string>Nabla</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
