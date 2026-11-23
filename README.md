@@ -145,4 +145,4 @@ L'app est alors notarisée et s'ouvre sans avertissement :
 
 ## Licence
 
-MIT : voir [LICENSE](LICENSE).
+Tous droits réservés : voir [LICENSE](LICENSE). Les versions publiées sont gratuites ; le code est consultable, mais pas réutilisable sans autorisation.
