@@ -16,7 +16,7 @@
 
 ## Installer
 
-1. Télécharger `Nabla.dmg` depuis la page des versions (Releases), l'ouvrir, et glisser **Nabla** sur le raccourci **Applications**.
+1. Télécharger `Nabla-X.Y.Z.dmg` de la dernière version sur la page [Releases](../../releases), l'ouvrir, et glisser **Nabla** sur le raccourci **Applications**.
 2. Au premier lancement, macOS refuse d'ouvrir l'app : elle n'est pas notarisée par Apple (le projet n'a pas de
    compte Apple Developer payant). Pour l'autoriser, une seule fois :
    ouvrir **Réglages Système › Confidentialité et sécurité**, descendre jusqu'au message sur Nabla,
@@ -49,11 +49,29 @@ Nabla compile avec la distribution LaTeX du Mac : installer [MacTeX](https://www
 cd app && swift test
 ```
 
+## Versions
+
+Toutes les versions se téléchargent sur la page [Releases](../../releases). Ce qui change d'une version à l'autre
+(nouveautés, améliorations, bugs corrigés) est dans [CHANGELOG.md](CHANGELOG.md).
+
+Numérotation `vMAJEUR.MINEUR.CORRECTIF` : un correctif (v1.0.1) ne fait que corriger des bugs,
+une version mineure (v1.1.0) ajoute ou améliore sans rien casser, une version majeure (v2.0.0) demande une action.
+
 ## Publier une version
 
-`./app/build.sh` laisse `app/Nabla.dmg` (l'app et un raccourci vers Applications), à joindre à une version (Release) sur GitHub. Sans compte Apple Developer,
-l'app est signée « ad hoc » (sans certificat) : macOS l'accepte après l'autorisation décrite dans « Installer ».
-Sans cette signature, un Mac à puce Apple déclarerait l'app « endommagée ».
+1. Ajouter en haut de `CHANGELOG.md` une section `## vX.Y.Z (date)` avec ses rubriques
+   **Nouveautés**, **Améliorations** et **Bugs corrigés**, puis commiter sur `main`.
+2. Lancer :
+
+   ```sh
+   ./app/release.sh
+   ```
+
+   Le script vérifie que tout est commité et à jour, construit l'app (le numéro de version vient du CHANGELOG),
+   crée le tag `vX.Y.Z`, le pousse et publie la Release avec `Nabla-X.Y.Z.dmg` et les notes de la version.
+
+Sans compte Apple Developer, l'app est signée « ad hoc » (sans certificat) : macOS l'accepte après l'autorisation
+décrite dans « Installer ». Sans cette signature, un Mac à puce Apple déclarerait l'app « endommagée ».
 
 ### Avec un compte Apple Developer (facultatif, 99 $/an)
 

@@ -4,7 +4,8 @@
 #   NABLA_SIGN_IDENTITY="Developer ID Application: Nom (EQUIPE)" NABLA_NOTARY_PROFILE=nabla ./app/build.sh
 set -e
 cd "$(dirname "$0")"
-VERSION=1.0
+VERSION=$(sed -n 's/^## v\([0-9][0-9.]*\).*/\1/p' ../CHANGELOG.md | head -1)  # la version la plus récente du CHANGELOG
+[ -n "$VERSION" ] || { echo "Aucune version « ## vX.Y.Z » dans CHANGELOG.md" >&2; exit 1; }
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)  # numéro de build : nombre de commits, toujours croissant
 # Programme universel : Mac à puce Apple et Mac Intel.
 swift build -c release --arch arm64 --arch x86_64
