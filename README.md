@@ -145,4 +145,4 @@ L'app est alors notarisée et s'ouvre sans avertissement :
 
 ## Licence
 
-Tous droits réservés : voir [LICENSE](LICENSE). Les versions publiées sont gratuites ; le code est consultable, mais pas réutilisable sans autorisation.
+[PolyForm Noncommercial 1.0.0](LICENSE) : le code est libre pour tout usage non commercial ; un usage commercial du code demande l'autorisation de l'auteur. Les versions publiées de l'app restent gratuites pour tout usage, professionnel compris.
