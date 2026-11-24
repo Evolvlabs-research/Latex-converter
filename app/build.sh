@@ -1,6 +1,6 @@
 #!/bin/sh
 # Construit app/Nabla.app : ./app/build.sh && open app/Nabla.app
-# Sans compte Apple : signature ad hoc. Avec un compte, signature et notarisation (voir README.md) :
+# Sans compte Apple : signature ad hoc. Avec un compte Developer ID, signature et notarisation :
 #   NABLA_SIGN_IDENTITY="Developer ID Application: Nom (EQUIPE)" NABLA_NOTARY_PROFILE=nabla ./app/build.sh
 set -e
 cd "$(dirname "$0")"

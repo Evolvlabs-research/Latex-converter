@@ -1,5 +1,5 @@
 /*
-  ui.js - the taste-skill UI fragment kit. One ES module, no dependencies.
+  ui.js - the UI fragment kit. One ES module, no dependencies.
 
   A fragment is a folder next to this file: <name>/fragment.html, fragment.css, meta.json and,
   when it moves, fragment.js (export default function (root, opts) -> { destroy() }).
