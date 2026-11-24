@@ -2,7 +2,7 @@
 name = "nabla"
 version = "1.0.0"
 description = "Nabla pour Windows : éditeur LaTeX local, sans compte"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "MIT"
 edition = "2024"
 
 [dependencies]
