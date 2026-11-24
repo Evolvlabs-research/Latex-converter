@@ -1,5 +1,5 @@
 /*
-  taste-skill layout.css - layout v4 (references/layout-v4.md): one section per screen, equal left and
+  layout.css - layout v4 (references/layout-v4.md): one section per screen, equal left and
   right edges, the ten hero types (heroes.json) and the display tokens a font pairing sets (fonts.json).
   Link it after system.css, ui/cards.css and backgrounds/backgrounds.css; load layout.js after system.js.
 

@@ -1,5 +1,5 @@
 /*
-  taste-skill system.css - the one system for the page. Link it first, then assets/ui/cards.css (the
+  system.css - the one system for the page. Link it first, then assets/ui/cards.css (the
   feature card, its panel and the fragment placements), then set the palette (--p-*), the fonts and
   the radius set on :root in the page (node scripts/start.mjs prints that block).
   Do not add a second grid, spacing scale, type scale, radius scale, button or card style.
